@@ -1643,28 +1643,41 @@ export function AccountPage() {
 export function LoginPage() {
   const { copy } = useI18n()
   const testingAccounts = {
-    '127.0.0.1': {
+    customer: {
       role: 'Customer',
       email: 'customer@halaldelivery.demo',
       password: 'CustomerDemo!2026',
     },
-    '127.0.0.2': {
+    admin: {
       role: 'Administrator',
       email: 'admin@halaldelivery.demo',
       password: 'AdminDemo!2026',
     },
-    '127.0.0.3': {
+    restaurant: {
       role: 'Restaurant owner',
       email: 'owner@emberandolive.demo',
       password: 'RestaurantDemo!2026',
     },
   } as const
-  const testingAccount = testingAccounts[
-    window.location.hostname as keyof typeof testingAccounts
-  ]
-  const showTestingTabs =
-    import.meta.env.DEV &&
-    (window.location.hostname === 'localhost' || window.location.hostname.startsWith('127.'))
+  const loopbackRoles = {
+    '127.0.0.1': 'customer',
+    '127.0.0.2': 'admin',
+    '127.0.0.3': 'restaurant',
+  } as const
+  const hostname = window.location.hostname
+  const isLoopbackHost = hostname === 'localhost' || hostname.startsWith('127.')
+  const loopbackRole = loopbackRoles[hostname as keyof typeof loopbackRoles]
+  const requestedRole = new URLSearchParams(window.location.search).get('pocRole')
+  const publicRole =
+    !isLoopbackHost && requestedRole && requestedRole in testingAccounts
+      ? requestedRole as keyof typeof testingAccounts
+      : undefined
+  const pocTestingEnabled =
+    import.meta.env.DEV || import.meta.env.VITE_ENABLE_POC_TESTING === 'true'
+  const testingRole = pocTestingEnabled ? (loopbackRole ?? publicRole) : undefined
+  const testingAccount = testingRole ? testingAccounts[testingRole] : undefined
+  const showLocalTestingTabs = pocTestingEnabled && isLoopbackHost
+  const showPublicTestingTabs = pocTestingEnabled && !isLoopbackHost
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState<string>(testingAccount?.email ?? '')
@@ -1784,7 +1797,37 @@ export function LoginPage() {
         </span>
         <h1>{copy.login.title}</h1>
         <p>{copy.login.lead}</p>
-        {showTestingTabs && <div className="testing-tabs"><strong>POC testing tabs</strong><p>Each link opens an isolated login session. No incognito windows needed.</p><div><a href="http://127.0.0.1:5173/login" target="_blank" rel="noreferrer">Customer</a><a href="http://127.0.0.2:5173/login" target="_blank" rel="noreferrer">Admin</a><a href="http://127.0.0.3:5173/login" target="_blank" rel="noreferrer">Restaurant</a></div>{testingAccount && <small>{testingAccount.role} credentials are prefilled for this tab.</small>}</div>}
+        {showLocalTestingTabs && (
+          <div className="testing-tabs">
+            <strong>POC testing tabs</strong>
+            <p>Each link opens an isolated login session. No incognito windows needed.</p>
+            <div>
+              <a href="http://127.0.0.1:5173/login" target="_blank" rel="noreferrer">Customer</a>
+              <a href="http://127.0.0.2:5173/login" target="_blank" rel="noreferrer">Admin</a>
+              <a href="http://127.0.0.3:5173/login" target="_blank" rel="noreferrer">Restaurant</a>
+            </div>
+            {testingAccount && (
+              <small>{testingAccount.role} credentials are prefilled for this tab.</small>
+            )}
+          </div>
+        )}
+        {showPublicTestingTabs && (
+          <div className="testing-tabs">
+            <strong>Public POC role testing</strong>
+            <p>
+              This public URL uses one browser session. Test roles sequentially and sign out before
+              changing roles.
+            </p>
+            <div>
+              <a href="/login?pocRole=customer" aria-current={publicRole === 'customer' ? 'page' : undefined}>Customer</a>
+              <a href="/login?pocRole=admin" aria-current={publicRole === 'admin' ? 'page' : undefined}>Admin</a>
+              <a href="/login?pocRole=restaurant" aria-current={publicRole === 'restaurant' ? 'page' : undefined}>Restaurant</a>
+            </div>
+            {testingAccount && (
+              <small>{testingAccount.role} demo credentials are prefilled. Sign in to continue.</small>
+            )}
+          </div>
+        )}
         <div className="auth-tabs" role="tablist">
           <button className={mode === 'login' ? 'active' : ''} type="button" onClick={() => setMode('login')}>{copy.login.signInTab}</button>
           <button className={mode === 'register' ? 'active' : ''} type="button" onClick={() => setMode('register')}>{copy.login.registerTab}</button>

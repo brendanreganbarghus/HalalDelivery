@@ -25,6 +25,8 @@ pnpm dev
   can be overridden with the `DATABASE_URL` environment variable (defaults to
   `postgres://halaldelivery:halaldelivery_dev@localhost:55433/halaldelivery`).
 - `pnpm dev` runs the Vite dev server (`dev:web`) and the Fastify API (`dev:api`) concurrently.
+  Halal Delivery uses fixed ports and fails instead of selecting a different port when one is busy:
+  web `5173`, API `3001`, and PostgreSQL host `55433`.
 
 Open `http://localhost:5173`. Customers can create an immediately active manual account from
 `/login`; until an email provider is connected, these accounts are clearly marked as
@@ -53,6 +55,18 @@ cookie session:
 
 The matching demo credentials are prefilled on each local login page.
 
+## Public POC role testing
+
+When the development server is exposed through ngrok, open the same-origin customer link:
+`https://<active-ngrok-host>/login?pocRole=customer`. The login page also provides Admin and
+Restaurant buttons that retain the current public origin and prefill the matching demo credentials.
+Unlike the three loopback hosts, one public hostname has one cookie session: sign out before
+switching roles and test roles sequentially.
+
+Development builds show this public POC panel automatically. Production builds hide it and disable
+credential prefill unless `VITE_ENABLE_POC_TESTING=true` is explicitly set at build time. Keep the
+flag disabled for production deployments.
+
 ## Demo credentials
 
 POC accounts recreated by `pnpm db:reset`:
@@ -73,6 +87,14 @@ The API connects using the `DATABASE_URL` environment variable, defaulting to th
 `postgres` service (`postgres://halaldelivery:halaldelivery_dev@localhost:55433/halaldelivery`).
 Set `DATABASE_URL` before running `pnpm dev`/`pnpm db:reset` to point at a different PostgreSQL 17
 instance.
+
+The local runtime ports are intentionally fixed to avoid colliding with other repositories:
+
+| Service | Local endpoint |
+| --- | --- |
+| Web | `http://127.0.0.1:5173` |
+| API | `http://127.0.0.1:3001` |
+| PostgreSQL | `localhost:55433` |
 
 ## Modifier templates
 

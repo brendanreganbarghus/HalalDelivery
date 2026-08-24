@@ -369,7 +369,7 @@ footer { background: #061f13; color: white; padding-top: 65px; }
 .testing-tabs > p { margin: 4px 0 11px; color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
 .testing-tabs > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .testing-tabs a { min-height: 35px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 800; }
-.testing-tabs a:hover { border-color: var(--accent-green); color: var(--accent-green); }
+.testing-tabs a:hover, .testing-tabs a[aria-current='page'] { border-color: var(--accent-green); color: var(--accent-green); }
 .testing-tabs small { display: block; margin-top: 9px; color: #9ee1b8; font-size: 9px; }
 .auth-tabs { background: var(--surface-input); }
 .auth-tabs button { color: var(--text-muted); }
