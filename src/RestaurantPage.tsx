@@ -324,7 +324,10 @@ export function RestaurantPage() {
 
       <main>
         <section className="storefront-hero">
-          <img src={restaurant.landing_image_url} alt="" />
+          <img src={restaurant.landing_image_url} alt="" onError={(event) => {
+            event.currentTarget.onerror = null
+            event.currentTarget.src = restaurant.image_url
+          }} />
           <div className="storefront-hero__shade" />
           <div className="storefront-hero__content">
             <span><BadgeCheck /> {restaurant.halal_status}</span>
@@ -386,7 +389,10 @@ export function RestaurantPage() {
                     {items.map((item, index) => (
                       <article className={`dish-card${item.is_available === false ? ' dish-card--unavailable' : ''}`} key={item.id}>
                         <button className="dish-card__info" type="button" onClick={() => setSelectedItem(item)} aria-label={`${t.info}: ${item.name}`}><Info /></button>
-                        {item.image_url && <img src={item.image_url} alt="" />}
+                        {item.image_url && <img src={item.image_url} alt="" onError={(event) => {
+                          event.currentTarget.onerror = null
+                          event.currentTarget.src = restaurant.image_url
+                        }} />}
                         <div>
                           <div className="dish-card__labels">{item.popular && <span>Popular</span>}{activeOffer && index === 0 && <span className="dish-card__offer">{activeOffer.title}</span>}{item.is_available === false && <span>{t.unavailable}</span>}</div>
                           <h3>{item.name}</h3>
@@ -447,7 +453,10 @@ export function RestaurantPage() {
           <div className="promotion-prompt">
             <span aria-hidden="true">🎁</span>
             <p>{t.promoBody}</p>
-            <article>{promotionItem.image_url && <img src={promotionItem.image_url} alt="" />}<div><h3>{promotionItem.name}</h3><p>{promotionItem.description}</p></div></article>
+            <article>{promotionItem.image_url && <img src={promotionItem.image_url} alt="" onError={(event) => {
+              event.currentTarget.onerror = null
+              event.currentTarget.src = restaurant.image_url
+            }} />}<div><h3>{promotionItem.name}</h3><p>{promotionItem.description}</p></div></article>
             <footer><button type="button" onClick={() => setPromotionItem(null)}>{t.noThanks}</button><button className="promotion-prompt__add" type="button" onClick={() => { setConfiguringItem(promotionItem); setPromotionItem(null) }}>{t.addAnother}</button></footer>
           </div>
         </Modal>
