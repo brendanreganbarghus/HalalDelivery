@@ -594,9 +594,13 @@ app.get('/api/discovery', async () => {
           restaurant.is_open
           and (
             (restaurant.opening_time <= restaurant.closing_time
-              and localtime >= restaurant.opening_time and localtime < restaurant.closing_time)
+              and (current_timestamp at time zone 'Europe/Amsterdam')::time >= restaurant.opening_time
+              and (current_timestamp at time zone 'Europe/Amsterdam')::time < restaurant.closing_time)
             or (restaurant.opening_time > restaurant.closing_time
-              and (localtime >= restaurant.opening_time or localtime < restaurant.closing_time))
+              and (
+                (current_timestamp at time zone 'Europe/Amsterdam')::time >= restaurant.opening_time
+                or (current_timestamp at time zone 'Europe/Amsterdam')::time < restaurant.closing_time
+              ))
           )
         ) as accepting_orders
       from restaurant
@@ -682,9 +686,13 @@ app.get('/api/restaurants/:slug/storefront', async (request, reply) => {
         restaurant.is_open
         and (
           (restaurant.opening_time <= restaurant.closing_time
-            and localtime >= restaurant.opening_time and localtime < restaurant.closing_time)
+            and (current_timestamp at time zone 'Europe/Amsterdam')::time >= restaurant.opening_time
+            and (current_timestamp at time zone 'Europe/Amsterdam')::time < restaurant.closing_time)
           or (restaurant.opening_time > restaurant.closing_time
-            and (localtime >= restaurant.opening_time or localtime < restaurant.closing_time))
+            and (
+              (current_timestamp at time zone 'Europe/Amsterdam')::time >= restaurant.opening_time
+              or (current_timestamp at time zone 'Europe/Amsterdam')::time < restaurant.closing_time
+            ))
         )
       ) as accepting_orders
     from restaurant
@@ -710,9 +718,20 @@ app.get('/api/restaurants/:slug/storefront', async (request, reply) => {
         item.vat_rate::float, item.availability, item.item_type, item.modifier_config,
         (
           item.availability = 'all_day'
-          or (item.availability = 'lunch' and localtime >= time '11:00' and localtime < time '15:00')
-          or (item.availability = 'dinner' and localtime >= time '16:00' and localtime < time '23:59')
-          or (item.availability = 'weekends' and extract(isodow from current_date) in (6, 7))
+          or (
+            item.availability = 'lunch'
+            and (current_timestamp at time zone 'Europe/Amsterdam')::time >= time '11:00'
+            and (current_timestamp at time zone 'Europe/Amsterdam')::time < time '15:00'
+          )
+          or (
+            item.availability = 'dinner'
+            and (current_timestamp at time zone 'Europe/Amsterdam')::time >= time '16:00'
+            and (current_timestamp at time zone 'Europe/Amsterdam')::time < time '23:59'
+          )
+          or (
+            item.availability = 'weekends'
+            and extract(isodow from (current_timestamp at time zone 'Europe/Amsterdam')::date) in (6, 7)
+          )
         ) as is_available
       from menu_item item
       join menu_category category on category.id = item.category_id
@@ -1597,8 +1616,18 @@ app.post('/api/poc/checkout', async (request, reply) => {
           is_open
           and onboarding_status = 'active'
           and (
-            (opening_time <= closing_time and localtime >= opening_time and localtime < closing_time)
-            or (opening_time > closing_time and (localtime >= opening_time or localtime < closing_time))
+            (
+              opening_time <= closing_time
+              and (current_timestamp at time zone 'Europe/Amsterdam')::time >= opening_time
+              and (current_timestamp at time zone 'Europe/Amsterdam')::time < closing_time
+            )
+            or (
+              opening_time > closing_time
+              and (
+                (current_timestamp at time zone 'Europe/Amsterdam')::time >= opening_time
+                or (current_timestamp at time zone 'Europe/Amsterdam')::time < closing_time
+              )
+            )
           )
         ) as accepting_orders
       from restaurant
