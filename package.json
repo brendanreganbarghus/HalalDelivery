@@ -8,6 +8,7 @@
     "dev:web": "vite",
     "dev:api": "tsx watch server/index.ts",
     "db:reset": "tsx server/reset-poc.ts",
+    "db:sync-forno": "tsx server/sync-forno-poc.ts",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

@@ -94,6 +94,21 @@
 .category-list form { display: grid; grid-template-columns: 70px minmax(150px, 1fr) 80px 70px; gap: 8px; align-items: center; }
 .category-list span { color: #718078; font-size: 11px; }
 .category-list button, .offers-list article > button { border: 1px solid #c8d6cc; background: white; border-radius: 8px; min-height: 36px; cursor: pointer; font-weight: 700; font-size: 11px; }
+.menu-availability { margin-bottom: 22px; }
+.menu-availability__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 18px 22px 22px; }
+.menu-availability__list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 13px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-input); }
+.menu-availability__list article > div { min-width: 0; }
+.menu-availability__list strong, .menu-availability__list small { display: block; }
+.menu-availability__list strong { overflow: hidden; color: var(--text-primary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.menu-availability__list small { margin-top: 3px; color: var(--text-muted); font-size: 8px; }
+.menu-availability__list button { grid-column: 1 / -1; min-height: 34px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); color: var(--text-primary); display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; font-size: 9px; font-weight: 800; }
+.menu-availability__list button svg { width: 14px; }
+.menu-availability__list button:disabled { cursor: wait; opacity: .6; }
+.menu-availability__item--inactive { opacity: .72; }
+.vegetarian-field { grid-template-columns: auto 1fr !important; align-items: center; padding: 12px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface-input); }
+.vegetarian-field input { width: 17px !important; height: 17px !important; min-height: 0 !important; accent-color: var(--accent-green); }
+.vegetarian-field span { color: var(--text-primary); font-weight: 800; }
+.vegetarian-field small { grid-column: 2; color: var(--text-muted); font-size: 8px; font-weight: 500; }
 .profile-hero-preview { width: calc(100% + 36px); height: 150px; margin: -18px -18px 16px; object-fit: cover; }
 .profile-preview > small { margin-top: 8px; }
 .offers-list { padding: 20px; display: grid; gap: 10px; }
@@ -428,6 +443,7 @@
   .portal-title { align-items: flex-start; flex-direction: column; }
   .portal-title__actions { width: 100%; flex-wrap: wrap; }
   .field-grid { grid-template-columns: 1fr; }
+  .menu-availability__list { grid-template-columns: 1fr; }
   .category-create { grid-template-columns: 75px 1fr; }
   .category-create .portal-primary { grid-column: 1 / -1; }
   .category-list form { grid-template-columns: 58px 1fr 62px; }

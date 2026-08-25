@@ -58,6 +58,7 @@ const menuSubmissionSchema = z.object({
   allergens: z.array(z.enum(allergens)).max(allergens.length),
   vat_rate: z.union([z.literal(9), z.literal(21)]),
   availability: z.enum(['all_day', 'lunch', 'dinner', 'weekends']),
+  is_vegetarian: z.boolean().default(false),
   item_type: z.enum(itemTypes).default('standard'),
   modifier_config: modifierConfigSchema.default([]),
 })
@@ -618,7 +619,27 @@ app.get('/api/discovery', async () => {
     `,
     sql`
       select id, category_id, name, description, price_cents, popular, image_url,
-        ingredients, allergens, vat_rate::float, availability, item_type, modifier_config
+        ingredients, allergens, vat_rate::float, availability, is_vegetarian, item_type, modifier_config,
+        (
+          is_active
+          and (
+            availability = 'all_day'
+            or (
+              availability = 'lunch'
+              and (current_timestamp at time zone 'Europe/Amsterdam')::time >= time '11:00'
+              and (current_timestamp at time zone 'Europe/Amsterdam')::time < time '15:00'
+            )
+            or (
+              availability = 'dinner'
+              and (current_timestamp at time zone 'Europe/Amsterdam')::time >= time '16:00'
+              and (current_timestamp at time zone 'Europe/Amsterdam')::time < time '23:59'
+            )
+            or (
+              availability = 'weekends'
+              and extract(isodow from (current_timestamp at time zone 'Europe/Amsterdam')::date) in (6, 7)
+            )
+          )
+        ) as is_available
       from menu_item
       order by popular desc, name
     `,
@@ -659,6 +680,38 @@ app.get('/api/discovery', async () => {
     charities: charityRows,
   }
 })
+
+async function getNextPreorderSlots(restaurantId: string): Promise<string[]> {
+  const rows = await sql`
+    with hours as (
+      select opening_time, closing_time, is_open, onboarding_status,
+        current_timestamp at time zone 'Europe/Amsterdam' as local_now
+      from restaurant
+      where id = ${restaurantId} and market_code = ${activeMarket}
+    ),
+    next_opening as (
+      select opening_time, closing_time, is_open, onboarding_status,
+        case
+          when local_now::time < opening_time then local_now::date
+          else local_now::date + 1
+        end as opening_date
+      from hours
+    )
+    select slot_local at time zone 'Europe/Amsterdam' as scheduled_for
+    from next_opening
+    cross join lateral generate_series(
+      opening_date + opening_time + interval '30 minutes',
+      opening_date + closing_time
+        + case when opening_time > closing_time then interval '1 day' else interval '0 days' end
+        - interval '15 minutes',
+      interval '15 minutes'
+    ) as slot_local
+    where is_open = true and onboarding_status = 'active'
+    order by slot_local
+    limit 64
+  `
+  return rows.map((row) => new Date(row.scheduled_for).toISOString())
+}
 
 app.get('/api/restaurants/:slug/storefront', async (request, reply) => {
   const parsed = z.object({
@@ -705,6 +758,10 @@ app.get('/api/restaurants/:slug/storefront', async (request, reply) => {
   `
   const restaurant = restaurants[0]
   if (!restaurant) return reply.code(404).send({ message: 'Restaurant not found.' })
+  const preorderSlots = restaurant.accepting_orders
+    ? []
+    : await getNextPreorderSlots(restaurant.id)
+  const availabilityReference = preorderSlots[0] ?? new Date().toISOString()
 
   const [categoryRows, itemRows, reviewRows, offerRows, charityRows] = await Promise.all([
     sql`
@@ -715,22 +772,25 @@ app.get('/api/restaurants/:slug/storefront', async (request, reply) => {
     sql`
       select item.id, item.category_id, item.name, item.description, item.price_cents,
         item.popular, item.image_url, item.ingredients, item.allergens,
-        item.vat_rate::float, item.availability, item.item_type, item.modifier_config,
+        item.vat_rate::float, item.availability, item.is_vegetarian, item.item_type, item.modifier_config,
         (
-          item.availability = 'all_day'
-          or (
-            item.availability = 'lunch'
-            and (current_timestamp at time zone 'Europe/Amsterdam')::time >= time '11:00'
-            and (current_timestamp at time zone 'Europe/Amsterdam')::time < time '15:00'
-          )
-          or (
-            item.availability = 'dinner'
-            and (current_timestamp at time zone 'Europe/Amsterdam')::time >= time '16:00'
-            and (current_timestamp at time zone 'Europe/Amsterdam')::time < time '23:59'
-          )
-          or (
-            item.availability = 'weekends'
-            and extract(isodow from (current_timestamp at time zone 'Europe/Amsterdam')::date) in (6, 7)
+          item.is_active
+          and (
+            item.availability = 'all_day'
+            or (
+              item.availability = 'lunch'
+                and (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::time >= time '11:00'
+                and (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::time < time '15:00'
+            )
+            or (
+              item.availability = 'dinner'
+                and (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::time >= time '16:00'
+                and (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::time < time '23:59'
+            )
+            or (
+              item.availability = 'weekends'
+                and extract(isodow from (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::date) in (6, 7)
+            )
           )
         ) as is_available
       from menu_item item
@@ -771,6 +831,8 @@ app.get('/api/restaurants/:slug/storefront', async (request, reply) => {
   return {
     restaurant: {
       ...restaurant,
+      can_preorder: preorderSlots.length > 0,
+      preorder_slots: preorderSlots,
       menu: categoryRows.map((category) => ({
         ...category,
         items: itemsByCategory.get(category.id) ?? [],
@@ -812,7 +874,8 @@ app.get('/api/portal/me', async (request, reply) => {
       order by c.display_order
     `,
     sql`
-      select item.id, item.category_id, item.name, item.price_cents
+      select item.id, item.category_id, item.name, item.price_cents,
+        item.is_active, item.is_vegetarian, category.name as category_name
       from menu_item item
       join menu_category category on category.id = item.category_id
       where category.restaurant_id = ${restaurantId}
@@ -933,6 +996,30 @@ app.patch('/api/portal/restaurants/:restaurantId/categories/:categoryId', async 
   `
   if (updated.length === 0) return reply.code(404).send({ message: 'Category not found.' })
   return { id: categoryId, ...parsed.data }
+})
+
+app.patch('/api/portal/restaurants/:restaurantId/menu-items/:itemId/availability', async (request, reply) => {
+  const { restaurantId, itemId } = request.params as { restaurantId: string; itemId: string }
+  const parsed = z.object({ is_active: z.boolean() }).safeParse(request.body)
+  if (
+    !z.uuid().safeParse(restaurantId).success ||
+    !z.uuid().safeParse(itemId).success ||
+    !parsed.success
+  ) {
+    return reply.code(400).send({ message: 'Choose whether this menu item is available.' })
+  }
+
+  const updated = await sql`
+    update menu_item item
+    set is_active = ${parsed.data.is_active}
+    from menu_category category
+    where item.id = ${itemId}
+      and item.category_id = category.id
+      and category.restaurant_id = ${restaurantId}
+    returning item.id, item.is_active
+  `
+  if (updated.length === 0) return reply.code(404).send({ message: 'Menu item not found.' })
+  return updated[0]
 })
 
 async function validatePromotionScopesBelongToRestaurant(
@@ -1061,14 +1148,14 @@ app.post('/api/portal/restaurants/:restaurantId/menu-items', async (request, rep
   await sql`
     insert into menu_item_revision (
       id, restaurant_id, target_item_id, category_id, name, description, price_cents,
-      image_url, ingredients, allergens, vat_rate, availability, item_type, modifier_config,
-      status
+      image_url, ingredients, allergens, vat_rate, availability, is_vegetarian,
+      item_type, modifier_config, status
     )
     values (
       ${revisionId}, ${restaurantId}, ${item.target_item_id ?? null}, ${item.category_id},
       ${item.name}, ${item.description}, ${item.price_cents}, ${item.image_url},
       ${item.ingredients}, ${sql.array(item.allergens)}, ${item.vat_rate},
-      ${item.availability}, ${item.item_type}, ${sql.json(item.modifier_config)},
+      ${item.availability}, ${item.is_vegetarian}, ${item.item_type}, ${sql.json(item.modifier_config)},
       'pending_review'
     )
   `
@@ -1116,14 +1203,15 @@ app.post('/api/portal/restaurants/:restaurantId/menu-items/import', async (reque
       await transaction`
         insert into menu_item_revision (
           id, restaurant_id, category_id, name, description, price_cents, image_url,
-          ingredients, allergens, vat_rate, availability, item_type, modifier_config, status
+          ingredients, allergens, vat_rate, availability, is_vegetarian,
+          item_type, modifier_config, status
         )
         values (
           ${randomUUID()}, ${restaurantId},
           ${categoryByName.get(row.category_name.toLowerCase())}, ${row.name},
           ${row.description}, ${row.price_cents}, ${row.image_url}, ${row.ingredients},
           ${transaction.array(row.allergens)}, ${row.vat_rate}, ${row.availability},
-          ${row.item_type}, ${transaction.json(row.modifier_config)},
+          ${row.is_vegetarian}, ${row.item_type}, ${transaction.json(row.modifier_config)},
           'pending_review'
         )
       `
@@ -1425,6 +1513,7 @@ app.get('/api/customer/orders', async (request, reply) => {
 
   const orders = await sql`
     select orders.id, orders.order_number, orders.status, orders.paid_at,
+      orders.scheduled_delivery_at,
       orders.confirmed_at, orders.confirmation_email_status,
       orders.confirmation_email_sent_at, orders.gross_cents,
       orders.food_subtotal_before_discount_cents, orders.subtotal_cents,
@@ -1553,6 +1642,7 @@ app.post('/api/poc/checkout', async (request, reply) => {
     })).min(1).max(50),
     charity_ids: z.array(z.string().uuid()).max(3),
     payment_method: z.enum(['fake_card', 'ideal_wero']),
+    scheduled_for: z.iso.datetime().nullable().optional(),
   })
   const parsed = checkoutSchema.safeParse(request.body)
   if (!parsed.success) {
@@ -1573,6 +1663,7 @@ app.post('/api/poc/checkout', async (request, reply) => {
   if (new Set(lineKeys).size !== lineKeys.length) {
     return reply.code(400).send({ message: 'Each configured item may appear only once in checkout.' })
   }
+  const availabilityReference = parsed.data.scheduled_for ?? new Date().toISOString()
   const [menuItems, selectedCharities, commercialTerms, restaurantPolicies, activePromotions] = await Promise.all([
     sql`
       select item.id, item.category_id, item.name, item.price_cents, item.item_type, item.modifier_config
@@ -1583,11 +1674,23 @@ app.post('/api/poc/checkout', async (request, reply) => {
         and restaurant.market_code = ${activeMarket}
         and restaurant.onboarding_status = 'active'
         and restaurant.is_open = true
+        and item.is_active = true
         and (
           item.availability = 'all_day'
-          or (item.availability = 'lunch' and localtime >= time '11:00' and localtime < time '15:00')
-          or (item.availability = 'dinner' and localtime >= time '16:00' and localtime < time '23:59')
-          or (item.availability = 'weekends' and extract(isodow from current_date) in (6, 7))
+          or (
+            item.availability = 'lunch'
+            and (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::time >= time '11:00'
+            and (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::time < time '15:00'
+          )
+          or (
+            item.availability = 'dinner'
+            and (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::time >= time '16:00'
+            and (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::time < time '23:59'
+          )
+          or (
+            item.availability = 'weekends'
+            and extract(isodow from (${availabilityReference}::timestamptz at time zone 'Europe/Amsterdam')::date) in (6, 7)
+          )
         )
         and item.id = any(${sql.array(itemIds)}::uuid[])
     `,
@@ -1611,6 +1714,7 @@ app.post('/api/poc/checkout', async (request, reply) => {
     `,
     sql`
       select minimum_order_cents, delivery_fee_cents, free_delivery_threshold_cents,
+        is_open,
         service_fee_bps, service_fee_cap_cents,
         (
           is_open
@@ -1650,8 +1754,27 @@ app.post('/api/poc/checkout', async (request, reply) => {
 
   const policy = restaurantPolicies[0]
   if (!policy) return reply.code(404).send({ message: 'Restaurant not found.' })
+  let scheduledDeliveryAt: Date | null = null
   if (!policy.accepting_orders) {
-    return reply.code(409).send({ message: 'This restaurant is currently closed for orders.' })
+    if (!policy.is_open) {
+      return reply.code(409).send({ message: 'This restaurant is not currently accepting orders or preorders.' })
+    }
+    if (!parsed.data.scheduled_for) {
+      return reply.code(409).send({
+        message: 'This restaurant is closed now. Choose a delivery slot for its next opening.',
+      })
+    }
+    const validSlots = await getNextPreorderSlots(parsed.data.restaurant_id)
+    const requestedTime = new Date(parsed.data.scheduled_for).getTime()
+    const matchingSlot = validSlots.find((slot) => new Date(slot).getTime() === requestedTime)
+    if (!matchingSlot) {
+      return reply.code(409).send({
+        message: 'That preorder slot is no longer available. Choose one of the current delivery slots.',
+      })
+    }
+    scheduledDeliveryAt = new Date(matchingSlot)
+  } else if (parsed.data.scheduled_for) {
+    return reply.code(409).send({ message: 'This restaurant is open now; place the order for immediate delivery.' })
   }
   if (menuItems.length !== new Set(itemIds).size) {
     return reply.code(400).send({ message: 'One or more menu items are unavailable.' })
@@ -1771,7 +1894,7 @@ app.post('/api/poc/checkout', async (request, reply) => {
         applied_promotion_type, delivery_fee_cents, service_fee_cents, restaurant_payable_cents,
         platform_fee_cents, payment_fee_cents, donation_total_cents, payment_method,
         commission_bps, market_code, status, paid_at, confirmed_at,
-        confirmation_email_status, confirmation_email_sent_at, is_demo
+        scheduled_delivery_at, confirmation_email_status, confirmation_email_sent_at, is_demo
       )
       values (
         ${orderId}, ${orderNumber}, ${customer?.id ?? null}, ${parsed.data.restaurant_id},
@@ -1781,7 +1904,8 @@ app.post('/api/poc/checkout', async (request, reply) => {
         ${deliveryFeeCents}, ${serviceFeeCents},
         ${restaurantPayableCents}, ${platformFeeCents}, ${paymentFeeCents},
         ${donationTotalCents}, ${parsed.data.payment_method}, ${commissionBps},
-        ${activeMarket}, 'paid', now(), now(),
+        ${activeMarket}, ${scheduledDeliveryAt ? 'scheduled' : 'paid'}, now(),
+        ${scheduledDeliveryAt ? null : new Date()}, ${scheduledDeliveryAt},
         ${customer ? (simulatedConfirmationEmail ? 'simulated' : 'pending') : 'not_requested'},
         ${simulatedConfirmationEmail ? new Date() : null}, true
       )
@@ -1818,7 +1942,8 @@ app.post('/api/poc/checkout', async (request, reply) => {
   return reply.code(201).send({
     order_id: orderId,
     order_number: orderNumber,
-    status: 'paid',
+    status: scheduledDeliveryAt ? 'scheduled' : 'paid',
+    scheduled_delivery_at: scheduledDeliveryAt?.toISOString() ?? null,
     gross_cents: grossCents,
     subtotal_cents: subtotalCents,
     promotion_discount_cents: promotionDiscountCents,
@@ -1885,7 +2010,8 @@ app.post('/api/admin/menu-reviews/:revisionId/approve', async (request, reply) =
           description = ${revision.description}, price_cents = ${revision.price_cents},
           image_url = ${revision.image_url}, ingredients = ${revision.ingredients},
           allergens = ${transaction.array(revision.allergens)}, vat_rate = ${revision.vat_rate},
-          availability = ${revision.availability}, item_type = ${revision.item_type},
+          availability = ${revision.availability}, is_vegetarian = ${revision.is_vegetarian},
+          item_type = ${revision.item_type},
           modifier_config = ${transaction.json(revision.modifier_config)}
         where id = ${itemId}
         returning id
@@ -1895,13 +2021,14 @@ app.post('/api/admin/menu-reviews/:revisionId/approve', async (request, reply) =
       await transaction`
         insert into menu_item (
           id, category_id, name, description, price_cents, popular, image_url,
-          ingredients, allergens, vat_rate, availability, item_type, modifier_config
+          ingredients, allergens, vat_rate, availability, is_vegetarian, item_type, modifier_config
         )
         values (
           ${itemId}, ${revision.category_id}, ${revision.name}, ${revision.description},
           ${revision.price_cents}, false, ${revision.image_url}, ${revision.ingredients},
           ${transaction.array(revision.allergens)}, ${revision.vat_rate},
-          ${revision.availability}, ${revision.item_type}, ${transaction.json(revision.modifier_config)}
+          ${revision.availability}, ${revision.is_vegetarian}, ${revision.item_type},
+          ${transaction.json(revision.modifier_config)}
         )
       `
     }

@@ -114,6 +114,8 @@ export async function ensureSchema() {
       popular boolean not null default false,
       item_type text not null default 'standard',
       modifier_config jsonb not null default '[]'::jsonb,
+      is_active boolean not null default true,
+      is_vegetarian boolean not null default false,
       is_demo boolean not null default false
     )
   `
@@ -124,6 +126,8 @@ export async function ensureSchema() {
   await sql`alter table menu_item add column if not exists availability text not null default 'all_day'`
   await sql`alter table menu_item add column if not exists item_type text not null default 'standard'`
   await sql`alter table menu_item add column if not exists modifier_config jsonb not null default '[]'::jsonb`
+  await sql`alter table menu_item add column if not exists is_active boolean not null default true`
+  await sql`alter table menu_item add column if not exists is_vegetarian boolean not null default false`
 
   await sql`
     create table if not exists menu_item_revision (
@@ -141,6 +145,7 @@ export async function ensureSchema() {
       availability text not null,
       item_type text not null default 'standard',
       modifier_config jsonb not null default '[]'::jsonb,
+      is_vegetarian boolean not null default false,
       status text not null,
       submitted_at timestamptz not null default now(),
       reviewed_at timestamptz,
@@ -150,6 +155,7 @@ export async function ensureSchema() {
   `
   await sql`alter table menu_item_revision add column if not exists item_type text not null default 'standard'`
   await sql`alter table menu_item_revision add column if not exists modifier_config jsonb not null default '[]'::jsonb`
+  await sql`alter table menu_item_revision add column if not exists is_vegetarian boolean not null default false`
 
   await sql`
     create table if not exists restaurant_profile_revision (
@@ -355,6 +361,7 @@ export async function ensureSchema() {
       market_code text not null default 'NL' check (length(market_code) = 2),
       status text not null,
       paid_at timestamptz not null,
+      scheduled_delivery_at timestamptz,
       confirmed_at timestamptz,
       confirmation_email_status text not null default 'not_requested'
         check (confirmation_email_status in ('not_requested', 'pending', 'sent', 'simulated', 'failed')),
@@ -371,6 +378,7 @@ export async function ensureSchema() {
   await sql`alter table customer_order add column if not exists commission_bps integer not null default 1500`
   await sql`alter table customer_order add column if not exists market_code text not null default 'NL'`
   await sql`alter table customer_order add column if not exists confirmed_at timestamptz`
+  await sql`alter table customer_order add column if not exists scheduled_delivery_at timestamptz`
   await sql`alter table customer_order add column if not exists confirmation_email_status text not null default 'not_requested'`
   await sql`alter table customer_order add column if not exists confirmation_email_sent_at timestamptz`
   await sql`alter table customer_order add column if not exists food_subtotal_before_discount_cents integer`

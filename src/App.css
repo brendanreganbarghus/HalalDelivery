@@ -157,6 +157,14 @@ footer { background: #061f13; color: white; padding-top: 65px; }
 .menu-item h4 { margin: 4px 0 5px; font-size: 15px; }
 .menu-item p { color: var(--muted); font-size: 12px; line-height: 1.5; margin-bottom: 10px; }
 .menu-item strong { color: var(--green-800); font-size: 13px; }
+.menu-item--unavailable { opacity: .58; }
+.menu-item__unavailable { display: block; margin: 2px 0 7px; color: var(--text-muted); font-size: 10px; font-weight: 700; }
+.menu-item__vegetarian { display: block; width: fit-content; margin-top: 9px; padding: 4px 8px; border-radius: 999px; background: #167535; color: white; font-size: 9px; font-weight: 800; }
+.preorder-slot { display: grid; gap: 7px; margin: 14px 0 18px; padding: 14px; border: 1px solid rgba(66,200,120,.35); border-radius: 11px; background: rgba(66,200,120,.09); }
+.preorder-slot > span { display: flex; align-items: center; gap: 7px; color: var(--accent-green); font-size: 11px; font-weight: 800; }
+.preorder-slot svg { width: 16px; }
+.preorder-slot small { color: var(--text-secondary); font-size: 9px; line-height: 1.5; }
+.preorder-slot select { width: 100%; min-height: 42px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 10px; background: var(--surface-input); color: var(--text-primary); font: inherit; }
 .popular-label { color: var(--green-700); text-transform: uppercase; letter-spacing: .1em; font-size: 9px; font-weight: 800; }
 .menu-item > button, .quantity button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid #cbd8cd; background: white; color: var(--green-700); display: grid; place-items: center; cursor: pointer; flex: 0 0 auto; }
 .menu-item button svg { width: 17px; }

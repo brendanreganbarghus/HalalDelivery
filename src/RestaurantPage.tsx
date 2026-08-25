@@ -3,12 +3,14 @@ import { Link, useParams } from '@tanstack/react-router'
 import {
   ArrowLeft,
   BadgeCheck,
+  Building2,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
   Clock3,
   Filter,
   Info,
+  Leaf,
   Minus,
   Plus,
   Search,
@@ -60,6 +62,8 @@ type StorefrontRestaurant = Restaurant & {
   offers: Offer[]
   reviews: Review[]
   accepting_orders: boolean
+  can_preorder: boolean
+  preorder_slots: string[]
 }
 
 type StorefrontData = {
@@ -185,6 +189,7 @@ export function RestaurantPage() {
     },
   })
   const restaurant = data?.restaurant
+  const canOrder = Boolean(restaurant?.accepting_orders || restaurant?.can_preorder)
   const allItems = useMemo(
     () => restaurant?.menu.flatMap((category) => category.items) ?? [],
     [restaurant],
@@ -247,7 +252,7 @@ export function RestaurantPage() {
     priceLines.reduce((sum, line) => sum + line.quantity, 0)
 
   function changeQuantity(itemId: string, amount: number) {
-    if (amount > 0 && !restaurant?.accepting_orders) return
+    if (amount > 0 && !canOrder) return
     setBag((current) => {
       const quantity = Math.max(0, (current[itemId] ?? 0) + amount)
       const next = { ...current }
@@ -258,7 +263,7 @@ export function RestaurantPage() {
   }
 
   function changeConfiguredLineQuantity(lineId: string, amount: number) {
-    if (amount > 0 && !restaurant?.accepting_orders) return
+    if (amount > 0 && !canOrder) return
     setConfiguredLines((current) => {
       const existing = current[lineId]
       if (!existing) return current
@@ -333,6 +338,17 @@ export function RestaurantPage() {
           </div>
           {activeOffer && <button className="offer-ribbon" type="button" onClick={() => setPanel('offers')}><Tag /> {activeOffer.title}</button>}
         </section>
+        {!restaurant.accepting_orders && restaurant.can_preorder && (
+          <section className="storefront-preorder-notice">
+            <Clock3 />
+            <div>
+              <strong>{language === 'nl' ? 'Nu gesloten — vooraf bestellen is mogelijk' : 'Closed now — preorder for later'}</strong>
+              <p>{language === 'nl'
+                ? 'Voeg gerechten toe en kies bij het afrekenen een bezorgmoment vanaf 30 minuten na opening.'
+                : 'Add your food now, then choose a delivery slot from 30 minutes after the restaurant opens.'}</p>
+            </div>
+          </section>
+        )}
 
         <section className="storefront-summary">
           <div className="storefront-tabs">
@@ -368,7 +384,7 @@ export function RestaurantPage() {
                   <h2><span>{category.emoji}</span>{category.name}</h2>
                   <div className="dish-grid">
                     {items.map((item, index) => (
-                      <article className="dish-card" key={item.id}>
+                      <article className={`dish-card${item.is_available === false ? ' dish-card--unavailable' : ''}`} key={item.id}>
                         <button className="dish-card__info" type="button" onClick={() => setSelectedItem(item)} aria-label={`${t.info}: ${item.name}`}><Info /></button>
                         {item.image_url && <img src={item.image_url} alt="" />}
                         <div>
@@ -376,8 +392,9 @@ export function RestaurantPage() {
                           <h3>{item.name}</h3>
                           <p>{item.description}</p>
                           <strong>{t.from} {formatMoney(language, item.price_cents / 100)}</strong>
+                          {item.is_vegetarian && <span className="dish-card__vegetarian"><Leaf /> {language === 'nl' ? 'Vegetarisch' : 'Vegetarian'}</span>}
                         </div>
-                        <button className="dish-card__add" disabled={!restaurant.accepting_orders || item.is_available === false} type="button" onClick={() => addItem(item)} aria-label={`Add ${item.name}`}><Plus /></button>
+                        <button className="dish-card__add" disabled={!canOrder || item.is_available === false} type="button" onClick={() => addItem(item)} aria-label={`${restaurant.accepting_orders ? 'Add' : 'Preorder'} ${item.name}`} title={!restaurant.accepting_orders && restaurant.can_preorder ? 'Preorder for the next opening' : undefined}><Plus /></button>
                       </article>
                     ))}
                   </div>
@@ -397,15 +414,27 @@ export function RestaurantPage() {
                 </div>
                 <div className="basket__totals"><p><span>{t.subtotal}</span><strong>{formatMoney(language, menuSubtotal / 100)}</strong></p>{appliedPromotion && promotionDiscount > 0 && <p className="basket__discount"><span>{appliedPromotion.title}<small>{language === 'nl' ? 'Beste automatische aanbieding toegepast' : 'Best automatic offer applied'}</small></span><strong>− {formatMoney(language, promotionDiscount / 100)}</strong></p>}<p><span>{t.delivery}{appliedPromotion?.deliveryDiscountCents ? <small>{appliedPromotion.title} · {language === 'nl' ? 'gratis bezorging' : 'free delivery'}</small> : null}</span><strong>{appliedPromotion?.deliveryDiscountCents ? <><s>{formatMoney(language, baseDelivery / 100)}</s>{' '}</> : null}{formatMoney(language, delivery / 100)}</strong></p><p><span>{t.service} {restaurant.service_fee_bps / 100}%</span><strong>{formatMoney(language, service / 100)}</strong></p><p className="basket__total"><span>{t.total}</span><strong>{formatMoney(language, total / 100)}</strong></p></div>
                 {recommendation && <div className="basket__recommendation"><strong>{t.forgot}</strong><button type="button" onClick={() => addItem(recommendation)}><span>{recommendation.name}<small>{formatMoney(language, recommendation.price_cents / 100)}</small></span><Plus /></button></div>}
-                <button className="basket__checkout" disabled={!restaurant.accepting_orders || menuSubtotal < restaurant.minimum_order_cents} type="button" onClick={() => setCheckoutOpen(true)}><span>{restaurant.accepting_orders ? t.checkout : t.closed}</span><strong>{formatMoney(language, total / 100)}</strong></button>
+                <button className="basket__checkout" disabled={!canOrder || menuSubtotal < restaurant.minimum_order_cents} type="button" onClick={() => setCheckoutOpen(true)}><span>{restaurant.accepting_orders ? t.checkout : (language === 'nl' ? 'Bezorging inplannen' : 'Schedule delivery')}</span><strong>{formatMoney(language, total / 100)}</strong></button>
                 {menuSubtotal < restaurant.minimum_order_cents && <small className="basket__minimum">{t.minimum}: {formatMoney(language, restaurant.minimum_order_cents / 100)}</small>}
               </>
             )}
           </aside>
         </div>
+        <footer className="storefront-business">
+          <h2><Building2 /> {language === 'nl' ? 'Bedrijfsgegevens' : 'Business details'}</h2>
+          <address>
+            <strong>{restaurant.name}</strong>
+            <span>{restaurant.address}</span>
+          </address>
+          <p>
+            {language === 'nl'
+              ? 'Dit restaurant is een professionele handelaar. Halal Delivery en het restaurant delen hun verantwoordelijkheden tegenover consumenten.'
+              : 'This restaurant is a professional trader. Halal Delivery and the restaurant share responsibilities to customers.'}
+          </p>
+        </footer>
       </main>
 
-      <button className="mobile-basket" disabled={!restaurant.accepting_orders} type="button" onClick={() => basketCount ? setCheckoutOpen(true) : document.querySelector('.storefront-menu')?.scrollIntoView()}><ShoppingBag /><span>{restaurant.accepting_orders ? (basketCount ? `${basketCount} · ${formatMoney(language, total / 100)}` : t.emptyTitle) : t.closed}</span></button>
+      <button className="mobile-basket" disabled={!canOrder} type="button" onClick={() => basketCount ? setCheckoutOpen(true) : document.querySelector('.storefront-menu')?.scrollIntoView()}><ShoppingBag /><span>{restaurant.accepting_orders ? (basketCount ? `${basketCount} · ${formatMoney(language, total / 100)}` : t.emptyTitle) : (language === 'nl' ? 'Vooraf bestellen' : 'Preorder')}</span></button>
 
       {panel && <StorefrontPanel restaurant={restaurant} panel={panel} onClose={() => setPanel(null)} language={language} />}
       {feeOpen && <Modal title={t.feeTitle} onClose={() => setFeeOpen(false)}><p>{t.feeBody}</p><dl><div><dt>{t.delivery}</dt><dd>{restaurant.free_delivery_threshold_cents ? `${t.free} ${t.from} ${formatMoney(language, restaurant.free_delivery_threshold_cents / 100)}` : formatMoney(language, restaurant.delivery_fee_cents / 100)}</dd></div><div><dt>{t.service}</dt><dd>{restaurant.service_fee_bps / 100}% · max {formatMoney(language, restaurant.service_fee_cap_cents / 100)}</dd></div></dl></Modal>}

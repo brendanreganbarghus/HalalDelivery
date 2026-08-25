@@ -73,14 +73,15 @@ export async function resetPocData() {
           await transaction`
             insert into menu_item (
               id, category_id, name, description, price_cents, popular, image_url, item_type,
-              modifier_config, is_demo
+              modifier_config, is_vegetarian, is_demo
             )
             values (
               ${item.id}, ${category.id}, ${item.name}, ${item.description},
               ${item.priceCents}, ${item.popular},
               ${'imageUrl' in item ? item.imageUrl : restaurant.imageUrl},
               ${'itemType' in item ? item.itemType : 'standard'},
-              ${transaction.json('modifierConfig' in item ? item.modifierConfig : [])}, true
+              ${transaction.json('modifierConfig' in item ? item.modifierConfig : [])},
+              ${'vegetarian' in item ? item.vegetarian : false}, true
             )
           `
         }

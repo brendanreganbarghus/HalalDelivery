@@ -10,6 +10,8 @@ import {
   CircleHelp,
   Clock3,
   Copy,
+  Eye,
+  EyeOff,
   Gift,
   Image,
   LayoutDashboard,
@@ -88,8 +90,11 @@ type Category = {
 type PortalMenuItem = {
   id: string
   category_id: string
+  category_name: string
   name: string
   price_cents: number
+  is_active: boolean
+  is_vegetarian: boolean
 }
 
 type Revision = {
@@ -105,6 +110,7 @@ type Revision = {
   allergens: string[]
   vat_rate: number
   availability: string
+  is_vegetarian: boolean
   status: string
   submitted_at: string
 }
@@ -435,6 +441,7 @@ function MenuManager({ data, onSubmitted }: { data: RestaurantPortalData; onSubm
     allergens: [] as string[],
     vat_rate: 9 as 9 | 21,
     availability: 'all_day',
+    is_vegetarian: false,
     item_type: 'standard' as ItemType,
     modifier_config: [] as ModifierConfig,
   })
@@ -458,6 +465,7 @@ function MenuManager({ data, onSubmitted }: { data: RestaurantPortalData; onSubm
         image_url: '',
         ingredients: '',
         allergens: [],
+        is_vegetarian: false,
         item_type: 'standard',
         modifier_config: [],
       }))
@@ -479,6 +487,16 @@ function MenuManager({ data, onSubmitted }: { data: RestaurantPortalData; onSubm
       method: 'PATCH',
       body: JSON.stringify(categoryDrafts[categoryId]),
     }),
+    onSuccess: onSubmitted,
+  })
+  const updateAvailability = useMutation({
+    mutationFn: (item: PortalMenuItem) => api(
+      `/api/portal/restaurants/${data.restaurant.id}/menu-items/${item.id}/availability`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: !item.is_active }),
+      },
+    ),
     onSuccess: onSubmitted,
   })
 
@@ -612,6 +630,37 @@ function MenuManager({ data, onSubmitted }: { data: RestaurantPortalData; onSubm
         </div>
         {(createCategory.error || updateCategory.error) && <p className="form-error">{(createCategory.error ?? updateCategory.error)?.message}</p>}
       </section>
+      <section className="panel menu-availability">
+        <div className="panel-heading">
+          <div>
+            <h2>Published menu availability</h2>
+            <p>Temporarily deactivate an item when it cannot be ordered. This change is immediate and does not require approval.</p>
+          </div>
+        </div>
+        <div className="menu-availability__list">
+          {data.menu_items.map((item) => (
+            <article className={item.is_active ? '' : 'menu-availability__item--inactive'} key={item.id}>
+              <div>
+                <strong>{item.name}</strong>
+                <small>{item.category_name} · {money.format(item.price_cents / 100)}</small>
+              </div>
+              <span className={item.is_active ? 'status status--approved' : 'status status--disabled'}>
+                {item.is_active ? 'Available' : 'Unavailable'}
+              </span>
+              <button
+                type="button"
+                disabled={updateAvailability.isPending}
+                onClick={() => updateAvailability.mutate(item)}
+                aria-label={`${item.is_active ? 'Deactivate' : 'Activate'} ${item.name}`}
+              >
+                {item.is_active ? <EyeOff /> : <Eye />}
+                {item.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            </article>
+          ))}
+        </div>
+        {updateAvailability.error && <p className="form-error">{updateAvailability.error.message}</p>}
+      </section>
       <div className="editor-grid">
         <form className="panel item-form" onSubmit={(event) => { event.preventDefault(); setMessage(''); mutation.mutate() }}>
           <div className="form-section"><h2>Core details</h2><p>Clear names and descriptions improve customer confidence.</p></div>
@@ -664,6 +713,7 @@ function MenuManager({ data, onSubmitted }: { data: RestaurantPortalData; onSubm
           <div className="form-section"><h2>Food safety & availability</h2><p>Ingredients and the EU 14 allergens are mandatory review information.</p></div>
           <label>Ingredients *<textarea required minLength={3} value={form.ingredients} onChange={(event) => setForm({ ...form, ingredients: event.target.value })} placeholder="List ingredients in descending order." /></label>
           <fieldset><legend>Allergens * <small>Select all that apply, or leave empty only if none apply.</small></legend><div className="allergen-grid">{allergenOptions.map((allergen) => <label key={allergen}><input type="checkbox" checked={form.allergens.includes(allergen)} onChange={() => toggleAllergen(allergen)} /><span>{allergen}</span></label>)}</div></fieldset>
+          <label className="vegetarian-field"><input type="checkbox" checked={form.is_vegetarian} onChange={(event) => setForm({ ...form, is_vegetarian: event.target.checked })} /><span>Vegetarian item</span><small>Shows a vegetarian badge to customers after approval.</small></label>
           <label>Availability *<select value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })}><option value="all_day">All day</option><option value="lunch">Lunch only</option><option value="dinner">Dinner only</option><option value="weekends">Weekends only</option></select></label>
           <div className="form-section"><h2>Customer image</h2><p>Use a well-lit landscape image. Managed media upload is planned after the POC.</p></div>
           <label>Image URL *<input required type="url" value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} placeholder="https://..." /></label>
@@ -1325,7 +1375,7 @@ export function AdminPortal() {
               {pendingMenus.map((review) => (
                 <article key={review.id}>
                   <img src={review.image_url} alt="" />
-                  <div className="review-copy"><span>{review.restaurant_name} · {review.category_name}</span><h3>{review.name}</h3><p>{review.description}</p><small>{money.format(review.price_cents / 100)} · VAT {review.vat_rate}% · {review.allergens.length ? review.allergens.join(', ') : 'No declared allergens'}</small></div>
+                  <div className="review-copy"><span>{review.restaurant_name} · {review.category_name}</span><h3>{review.name}</h3><p>{review.description}</p><small>{money.format(review.price_cents / 100)} · VAT {review.vat_rate}% · {review.is_vegetarian ? 'Vegetarian · ' : ''}{review.allergens.length ? review.allergens.join(', ') : 'No declared allergens'}</small></div>
                   <button className="approve-button" disabled={approveMenu.isPending} onClick={() => approveMenu.mutate(review.id)}><Check /> Approve & publish</button>
                 </article>
               ))}

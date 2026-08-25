@@ -21,6 +21,10 @@
 .offer-ribbon { position: absolute; z-index: 2; right: clamp(20px, 5vw, 70px); bottom: 28px; display: flex; align-items: center; gap: 9px; max-width: 320px; border: 0; border-radius: 10px; padding: 13px 17px; background: #ffd54f; color: #382d00; box-shadow: 0 13px 30px rgba(32,28,5,.25); cursor: pointer; font-weight: 800; }
 .offer-ribbon svg { width: 18px; }
 .storefront-summary { min-height: 94px; padding: 0 clamp(20px, 4vw, 60px); background: #20201d; border-block: 1px solid #393934; display: flex; align-items: center; justify-content: space-between; gap: 22px; }
+.storefront-preorder-notice { margin: 18px 32px 0; padding: 15px 18px; border: 1px solid rgba(66,200,120,.35); border-radius: 12px; background: rgba(66,200,120,.1); display: flex; align-items: center; gap: 13px; color: #d9f4e3; }
+.storefront-preorder-notice > svg { width: 24px; flex: 0 0 auto; color: #42c878; }
+.storefront-preorder-notice strong { color: #70dfa0; font-size: 13px; }
+.storefront-preorder-notice p { margin: 3px 0 0; color: #b8c9be; font-size: 10px; line-height: 1.5; }
 .storefront-tabs { display: flex; align-self: stretch; }
 .storefront-tabs button { position: relative; border: 0; background: transparent; padding: 0 19px; cursor: pointer; color: #f4f4ee; font-weight: 800; }
 .storefront-tabs button:hover::after, .storefront-tabs button:focus-visible::after { content: ""; position: absolute; height: 3px; inset: auto 16px 0; background: #42c878; }
@@ -60,12 +64,25 @@
 .dish-card h3 { margin: 7px 26px 5px 0; font-size: 15px; }
 .dish-card p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; color: #c2c1b8; font-size: 11px; line-height: 1.5; margin-bottom: 14px; }
 .dish-card strong { color: #fff; font-size: 12px; }
+.dish-card__vegetarian { width: fit-content; margin-top: 12px; padding: 4px 8px; border-radius: 999px; background: #167535; color: #fff; display: flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 800; }
+.dish-card__vegetarian svg { width: 13px; height: 13px; }
 .dish-card__info { position: absolute; z-index: 2; top: 12px; left: calc(100% - 175px); width: 28px; height: 28px; border: 1px solid #5b5a53; border-radius: 50%; background: #272724; color: #fff; display: grid; place-items: center; cursor: pointer; }
 .dish-card__info svg { width: 14px; }
 .dish-card__add { position: absolute; z-index: 2; right: 12px; bottom: 12px; width: 40px; height: 40px; border: 1px solid #53625a; border-radius: 50%; background: #1b1b18; color: #42c878; display: grid; place-items: center; cursor: pointer; box-shadow: 0 7px 15px rgba(0,0,0,.28); }
 .dish-card__add:hover { background: #42c878; color: #07110b; transform: translateY(-2px); }
 .dish-card__add:disabled { background: #98a69c; box-shadow: none; cursor: not-allowed; transform: none; }
 .dish-card__add svg { width: 18px; }
+.dish-card--unavailable { border-color: #555550; background: #3a3936; }
+.dish-card--unavailable > img { filter: grayscale(1); opacity: .35; }
+.dish-card--unavailable > div, .dish-card--unavailable .dish-card__info { opacity: .58; }
+.dish-card--unavailable .dish-card__labels { opacity: 1; }
+.dish-card--unavailable .dish-card__labels span { color: #d3d5d2; background: #565652; }
+.storefront-business { margin: 55px 32px 0; padding: 28px 0 42px; border-top: 1px solid #484842; color: #d3d2ca; }
+.storefront-business h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 15px; color: #fff; font-size: 18px; }
+.storefront-business h2 svg { width: 18px; }
+.storefront-business address { display: grid; gap: 4px; font-size: 13px; font-style: normal; }
+.storefront-business address strong { color: #fff; }
+.storefront-business p { margin: 22px 0 0; padding-top: 20px; border-top: 1px solid #484842; color: #b9b8b0; font-size: 11px; line-height: 1.6; }
 .menu-no-results { padding: 60px 20px; text-align: center; color: #66736a; }
 .basket { position: fixed; z-index: 25; top: 68px; right: max(0px, calc((100vw - 1440px) / 2)); width: 360px; height: calc(100vh - 68px); overflow-y: auto; border-inline: 1px solid #484842; background: #292926; box-shadow: -14px 0 32px rgba(0,0,0,.2); }
 .basket__title { display: flex; align-items: center; gap: 12px; padding: 20px; border-bottom: 1px solid #45453f; }
@@ -177,6 +194,7 @@
   .storefront-hero { min-height: 500px; padding-top: 240px; }
   .storefront-hero > img { inset: 10px 10px auto; width: calc(100% - 20px); height: 230px; border-radius: 16px; }
   .storefront-hero__content { padding: 28px 20px 80px; }
+  .storefront-preorder-notice { margin: 14px 14px 0; }
   .storefront-hero h1 { max-width: 13ch; font-size: 40px; }
   .storefront-hero__content > p { font-size: 13px; }
   .offer-ribbon { left: 20px; right: auto; top: 18px; bottom: auto; max-width: calc(100% - 40px); font-size: 11px; }
@@ -195,6 +213,7 @@
   .dish-card__info { left: calc(100% - 145px); }
   .menu-category { margin-top: 30px; }
   .menu-category { scroll-margin-top: 116px; }
+  .storefront-business { margin: 35px 14px 0; padding-bottom: 100px; }
   .basket { display: none; }
   .mobile-basket { position: fixed; z-index: 20; left: 14px; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); min-height: 56px; border: 0; border-radius: 12px; padding: 0 20px; background: #08783d; color: #fff; box-shadow: 0 14px 35px rgba(4,65,32,.34); display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 800; }
   .mobile-basket svg { width: 19px; }

@@ -131,8 +131,8 @@
       <h2>Client-facing overview of the customer marketplace, partner centre, administration, promotions, checkout and reporting POC.</h2>
     </div>
     <div class="cover__meta">
-      <strong>Version 1.0 — Current POC build</strong>
-      25 August 2026 · Application revision c7c8f3c
+      <strong>Version 1.1 — Current POC build</strong>
+      25 August 2026 · Marketplace, catalogue and scheduled-order revision
     </div>
   </section>
 
@@ -196,7 +196,7 @@
           <li>Configures products and maintains a restaurant-specific basket.</li>
           <li>Receives the best eligible automatic promotion.</li>
           <li>Chooses optional impact support and demo payment method.</li>
-          <li>Views orders and reviews confirmed purchases.</li>
+          <li>Views immediate and scheduled orders and reviews confirmed purchases.</li>
         </ul>
       </article>
       <article class="card role">
@@ -332,7 +332,7 @@
   <section class="page">
     <p class="eyebrow">05 · Restaurant storefront</p>
     <h1>Menu, restaurant information and offers</h1>
-    <p>Each restaurant has a dedicated branded storefront. The hero presents verification, description, rating, delivery estimate, opening hours and the current offer. Customers can open reviews, restaurant information, offer details and a clear fee explanation.</p>
+    <p>Each restaurant has a dedicated branded storefront. The hero presents verification, description, rating, delivery estimate, opening hours and the current offer. Customers can open reviews, restaurant information, offer details and a clear fee explanation. The restaurant name, address and professional-trader responsibility statement are repeated in a business-details footer.</p>
     <figure>
       <img src="screenshots/04-restaurant-storefront.png" alt="Forno Halal Pizza storefront and menu">
       <figcaption>Figure 4 — Restaurant storefront with active offer, fee summary, category navigation, menu and persistent basket.</figcaption>
@@ -342,9 +342,10 @@
     <ul>
       <li>Search across item names and descriptions.</li>
       <li>Jump between menu categories and browse responsive product cards.</li>
-      <li>Show popularity, offer and availability labels.</li>
+      <li>Show popularity, offer, vegetarian and availability labels.</li>
       <li>View ingredients, declared allergens, VAT and availability details.</li>
-      <li>Prevent ordering while a restaurant or item is unavailable.</li>
+      <li>Keep deactivated items visible but dimmed and prevent them from being ordered.</li>
+      <li>When an active restaurant is closed, explain that customers can preorder and select a delivery slot for its next opening day.</li>
       <li>Recommend a supplementary item after products are added.</li>
     </ul>
     <div class="footer"><span>Halal Delivery Functional Specification</span><span>7</span></div>
@@ -466,7 +467,7 @@
   <section class="page">
     <p class="eyebrow">09 · Menu governance</p>
     <h1>Categories and menu submissions</h1>
-    <p>Partners can create and rename menu categories immediately for use inside the workspace. New menu items enter a governed review workflow and do not overwrite the published customer menu.</p>
+    <p>Partners can create and rename menu categories immediately for use inside the workspace. New menu items enter a governed review workflow and do not overwrite the published customer menu. Published items also have an immediate operational Activate/Deactivate control, independent of content approval.</p>
     <figure>
       <img src="screenshots/10-menu-management.png" alt="Restaurant menu management screen">
       <figcaption>Figure 10 — Menu manager with category controls, menu-item form, validation checklist and customer preview.</figcaption>
@@ -478,7 +479,7 @@
         <ul>
           <li>Name, category and useful description.</li>
           <li>Price including VAT and a 9% or 21% VAT classification.</li>
-          <li>Availability window and landscape image URL.</li>
+          <li>Availability window, vegetarian flag and landscape image URL.</li>
           <li>Customer preview before submission.</li>
         </ul>
       </article>
@@ -491,6 +492,9 @@
           <li>Required/default options and bounded extra prices.</li>
         </ul>
       </article>
+    </div>
+    <div class="callout">
+      <strong>Immediate availability control.</strong> Deactivation does not delete or rewrite approved catalogue content. The item remains visible to customers with an “Unavailable” state, while add-to-basket and authoritative checkout validation both block it.
     </div>
     <div class="footer"><span>Halal Delivery Functional Specification</span><span>13</span></div>
   </section>
@@ -737,7 +741,7 @@
         <tr><td>Email</td><td>Confirmation status recorded as simulated/sent</td><td>Transactional provider, templates, retries and delivery events</td></tr>
         <tr><td>Google sign-in</td><td>Available only when a Google client ID is configured</td><td>Production OAuth origins, consent and account-linking policy</td></tr>
         <tr><td>Media</td><td>Image URLs are entered directly</td><td>Managed upload, moderation, resizing and storage</td></tr>
-        <tr><td>Operations</td><td>Opening state and demo order acceptance</td><td>Live order dispatch, preparation workflow, courier tracking and cancellation</td></tr>
+        <tr><td>Operations</td><td>Immediate orders plus server-validated next-opening preorders in 15-minute slots</td><td>Live order dispatch, preparation workflow, courier tracking and cancellation</td></tr>
         <tr><td>Location</td><td>POC geocoding and seeded delivery radii</td><td>Address validation, routing, distance pricing and coverage rules</td></tr>
         <tr><td>Compliance</td><td>Functional allergen, VAT and halal-status fields</td><td>Legal review, privacy, retention, audit policy and certification workflow</td></tr>
         <tr><td>Reporting</td><td>Monthly operational ledger and print view</td><td>Exports, accounting integration, payout batches and reconciliation exceptions</td></tr>
@@ -750,6 +754,7 @@
       <li>Confirm partner catalogue/profile approval responsibilities.</li>
       <li>Confirm the three promotion types and one-winner stacking policy.</li>
       <li>Confirm commercial settlement definitions and donation treatment.</li>
+      <li>Confirm next-opening preorder slots, vegetarian labels and operational item availability.</li>
       <li>Prioritise production integrations and operational workflows.</li>
     </ol>
 

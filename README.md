@@ -45,9 +45,9 @@ email-unverified.
 - `/` — public marketing landing page and address search
 - `/restaurants` — signed-in-style restaurant and grocery discovery with delivery/collection,
   cuisine, offer, rating, favourite, and open-now filters
-- `/restaurant/:slug` — dedicated restaurant storefront, category browsing, offers, fee-aware
-  basket, and checkout
-- `/account` — confirmed customer order history and verified-order restaurant reviews
+- `/restaurant/:slug` — dedicated restaurant storefront, category browsing, offers, vegetarian
+  labels, fee-aware basket, and immediate or scheduled checkout
+- `/account` — customer order history, scheduled-delivery details, and verified-order reviews
 - `/restaurant-portal` — restaurant profile, governed menu submissions (including modifier
   templates), and promotions
 - `/admin` — invitations, approvals, sales splits, donation liabilities, and print report
@@ -149,6 +149,17 @@ Restaurant owners also manage storefront settings from `/restaurant-portal`: lan
 opening hours, minimum order, delivery/free-delivery thresholds, and capped service fees are
 submitted through the existing admin approval workflow. Categories (name and emoji) are
 immediately available to menu management.
+
+Published menu items have a separate operational availability control. Partners can deactivate or
+reactivate an item immediately without changing its approved catalogue content. Deactivated items
+remain visible but dimmed and cannot be added or checked out. Menu submissions also carry an
+explicit vegetarian flag, which is shown as a green badge on customer-facing item cards.
+
+When an active restaurant is closed by its configured hours, customers can still build a basket
+and schedule delivery for its next opening day. The API supplies valid 15-minute slots beginning
+30 minutes after opening and authoritatively validates the selected slot at checkout. Restaurants
+disabled operationally do not accept preorders. Scheduled orders retain their delivery time in the
+receipt and customer order history.
 
 Checkout snapshots the food subtotal, delivery fee, and capped service fee. Commission is
 calculated on the food subtotal, while restaurant payable includes delivery and the platform fee

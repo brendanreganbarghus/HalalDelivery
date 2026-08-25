@@ -56,6 +56,7 @@ export type MenuItem = {
   vat_rate?: number
   availability?: string
   is_available?: boolean
+  is_vegetarian?: boolean
   item_type?: ItemType
   modifier_config?: ModifierConfig
 }
@@ -123,6 +124,8 @@ export type Restaurant = {
   halal_status: string
   is_open: boolean
   accepting_orders?: boolean
+  can_preorder?: boolean
+  preorder_slots?: string[]
   charity_id: string
   menu: MenuCategory[]
   offers?: Offer[]
@@ -955,14 +958,18 @@ function MenuDrawer({
               {category.items.map((item) => {
                 const quantity = bag[item.id] ?? 0
                 return (
-                  <article className="menu-item" key={item.id}>
+                  <article className={`menu-item${item.is_available === false ? ' menu-item--unavailable' : ''}`} key={item.id}>
                     <div>
                       {item.popular && <span className="popular-label">{copy.menu.popular}</span>}
                       <h4>{item.name}</h4>
+                      {item.is_available === false && (
+                        <span className="menu-item__unavailable">{language === 'nl' ? 'Niet beschikbaar' : 'Unavailable'}</span>
+                      )}
                       <p>{item.description}</p>
                       <strong>{formatMoney(language, item.price_cents / 100)}</strong>
+                      {item.is_vegetarian && <span className="menu-item__vegetarian">{language === 'nl' ? 'Vegetarisch' : 'Vegetarian'}</span>}
                     </div>
-                    {quantity === 0 ? (
+                    {item.is_available === false ? null : quantity === 0 ? (
                       <button
                         type="button"
                         onClick={() => onChangeQuantity(item.id, 1)}
@@ -1023,6 +1030,7 @@ type CheckoutResult = {
   donation_total_cents: number
   confirmation_email_status: 'not_requested' | 'pending' | 'sent' | 'simulated'
   review_path: string | null
+  scheduled_delivery_at: string | null
 }
 
 export function CheckoutDrawer({
@@ -1048,6 +1056,7 @@ export function CheckoutDrawer({
   const [donate, setDonate] = useState(false)
   const [selectedCharities, setSelectedCharities] = useState<string[]>([])
   const [paymentMethod, setPaymentMethod] = useState<'fake_card' | 'ideal_wero'>('fake_card')
+  const [scheduledFor, setScheduledFor] = useState(restaurant?.preorder_slots?.[0] ?? '')
   const [receipt, setReceipt] = useState<CheckoutResult | null>(null)
 
   useEffect(() => {
@@ -1122,6 +1131,7 @@ export function CheckoutDrawer({
           ],
           charity_ids: donate ? selectedCharities : [],
           payment_method: paymentMethod,
+          scheduled_for: restaurant?.accepting_orders ? null : scheduledFor || null,
         }),
       })
       const result = (await response.json()) as CheckoutResult & { message?: string }
@@ -1149,6 +1159,7 @@ export function CheckoutDrawer({
   const canPay =
     hasLines &&
     menuSubtotalCents >= (restaurant?.minimum_order_cents ?? 0) &&
+    (restaurant?.accepting_orders !== false || Boolean(scheduledFor)) &&
     (!donate || selectedCharities.length > 0)
   const paymentError = payment.error
     ? localizeServerMessage(payment.error.message, language)
@@ -1215,6 +1226,19 @@ export function CheckoutDrawer({
                   <strong>{formatMoney(language, receipt.donation_total_cents / 100)}</strong>
                 </p>
               )}
+              {receipt.scheduled_delivery_at && (
+                <p>
+                  <span>{language === 'nl' ? 'Geplande bezorging' : 'Scheduled delivery'}</span>
+                  <strong>{new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : 'en-GB', {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZone: 'Europe/Amsterdam',
+                  }).format(new Date(receipt.scheduled_delivery_at))}</strong>
+                </p>
+              )}
             </div>
             {receipt.confirmation_email_status === 'simulated' && (
               <p className="receipt__email"><MessageSquareText /> {copy.checkout.receipt.emailSimulated}</p>
@@ -1241,6 +1265,28 @@ export function CheckoutDrawer({
                       <h3>{copy.checkout.order.title}</h3>
                       <p>{restaurant.name}</p>
                     </div>
+                    {restaurant.accepting_orders === false && restaurant.preorder_slots?.length ? (
+                      <label className="preorder-slot">
+                        <span><CalendarDays /> {language === 'nl' ? 'Kies je bezorgmoment' : 'Choose your delivery time'}</span>
+                        <small>{language === 'nl'
+                          ? 'Het restaurant is nu gesloten. Je bestelling wordt voorbereid wanneer het weer opent.'
+                          : 'The restaurant is closed now. Your order will be prepared when it reopens.'}</small>
+                        <select value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)}>
+                          {restaurant.preorder_slots.map((slot) => (
+                            <option value={slot} key={slot}>
+                              {new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : 'en-GB', {
+                                weekday: 'long',
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                timeZone: 'Europe/Amsterdam',
+                              }).format(new Date(slot))}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
                   </div>
                   {lines.map(({ item, quantity }) => (
                     <div className="checkout-line" key={item.id}>
@@ -1459,6 +1505,7 @@ type CustomerOrder = {
   order_number: string
   status: string
   paid_at: string
+  scheduled_delivery_at: string | null
   confirmed_at: string | null
   confirmation_email_status: 'not_requested' | 'pending' | 'sent' | 'simulated' | 'failed'
   confirmation_email_sent_at: string | null
@@ -1640,9 +1687,13 @@ export function AccountPage() {
               <div>
                 <span>{copy.account.orderReference} {order.order_number}</span>
                 <h2>{order.restaurant_name}</h2>
-                <p><CalendarDays /> {dateFormatter.format(new Date(order.paid_at))}</p>
+                <p><CalendarDays /> {order.scheduled_delivery_at
+                  ? `${language === 'nl' ? 'Gepland' : 'Scheduled'}: ${dateFormatter.format(new Date(order.scheduled_delivery_at))}`
+                  : dateFormatter.format(new Date(order.paid_at))}</p>
               </div>
-              <strong><Check /> {copy.account.confirmed}</strong>
+              <strong><Check /> {order.status === 'scheduled'
+                ? (language === 'nl' ? 'Ingepland' : 'Scheduled')
+                : copy.account.confirmed}</strong>
             </div>
             <div className="account-order__body">
               <div className="order-details">
