@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Halal Delivery - Functional Specification</title>
+  <style>
+    :root {
+      --green-950: #052016;
+      --green-800: #075d36;
+      --green-650: #078a49;
+      --green-100: #e7f6ed;
+      --ink: #17231d;
+      --muted: #53655b;
+      --line: #d9e5dd;
+      --cream: #f7faf8;
+      --gold: #d7a51d;
+    }
+    * { box-sizing: border-box; }
+    html { color: var(--ink); font: 10.4pt/1.48 "Segoe UI", Arial, sans-serif; }
+    body { margin: 0; background: #eef3ef; }
+    main { width: 210mm; margin: 0 auto; background: white; box-shadow: 0 4px 28px #10201920; }
+    .page { min-height: 297mm; padding: 18mm 17mm 16mm; position: relative; }
+    .cover {
+      display: flex;
+      min-height: 297mm;
+      flex-direction: column;
+      justify-content: space-between;
+      color: white;
+      background:
+        radial-gradient(circle at 82% 24%, #15b86655 0 12%, transparent 32%),
+        linear-gradient(145deg, #03160f, #073b27 62%, #078a49);
+    }
+    .cover__mark {
+      display: inline-grid;
+      width: 54px;
+      height: 54px;
+      place-items: center;
+      border-radius: 14px;
+      background: white;
+      color: var(--green-650);
+      font-size: 24px;
+      font-weight: 800;
+    }
+    .cover h1 { max-width: 150mm; margin: 42mm 0 5mm; font-size: 34pt; line-height: 1.05; letter-spacing: -.8px; }
+    .cover h2 { max-width: 135mm; margin: 0; color: #bce8cf; font-size: 16pt; font-weight: 500; }
+    .cover__meta { border-top: 1px solid #ffffff45; padding-top: 8mm; color: #d4eadd; }
+    .cover__meta strong { display: block; color: white; }
+    h1, h2, h3, h4 { color: var(--green-950); line-height: 1.18; }
+    h1 { margin: 0 0 8mm; font-size: 25pt; letter-spacing: -.4px; }
+    h2 { margin: 9mm 0 4mm; font-size: 17pt; }
+    h3 { margin: 6mm 0 2.5mm; font-size: 12.5pt; }
+    h4 { margin: 4mm 0 1.5mm; font-size: 10.5pt; }
+    p { margin: 0 0 3.5mm; }
+    ul, ol { margin: 2mm 0 4mm; padding-left: 6mm; }
+    li { margin-bottom: 1.4mm; }
+    a { color: var(--green-800); text-decoration: none; }
+    code { padding: .2mm 1.2mm; border-radius: 3px; background: #edf4ef; color: #064b2e; font: 9pt Consolas, monospace; }
+    .eyebrow { margin-bottom: 2mm; color: var(--green-650); font-size: 8.5pt; font-weight: 750; letter-spacing: 1.2px; text-transform: uppercase; }
+    .lead { max-width: 165mm; color: var(--muted); font-size: 12pt; }
+    .section-rule { height: 2px; margin: 6mm 0; background: linear-gradient(90deg, var(--green-650), transparent); }
+    .callout {
+      margin: 5mm 0;
+      padding: 4mm 5mm;
+      border-left: 4px solid var(--green-650);
+      border-radius: 0 6px 6px 0;
+      background: var(--green-100);
+    }
+    .callout strong { color: var(--green-800); }
+    .callout--gold { border-color: var(--gold); background: #fff8df; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+    .card { padding: 4.5mm; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); break-inside: avoid; }
+    .card h3 { margin-top: 0; }
+    .role { border-top: 3px solid var(--green-650); }
+    table { width: 100%; border-collapse: collapse; margin: 3mm 0 5mm; font-size: 9.2pt; break-inside: avoid; }
+    th { padding: 2.6mm; background: var(--green-950); color: white; text-align: left; }
+    td { padding: 2.5mm; border-bottom: 1px solid var(--line); vertical-align: top; }
+    tr:nth-child(even) td { background: #f7faf8; }
+    figure { margin: 5mm 0 7mm; break-inside: avoid; }
+    figure img {
+      display: block;
+      width: 100%;
+      max-height: 174mm;
+      object-fit: contain;
+      object-position: top center;
+      border: 1px solid #becdc3;
+      border-radius: 7px;
+      background: #07150f;
+    }
+    figcaption { margin-top: 2mm; color: var(--muted); font-size: 8.6pt; }
+    .shot-short img { max-height: 150mm; }
+    .shot-tall img { max-height: 196mm; }
+    .toc { columns: 2; column-gap: 12mm; padding: 0; list-style: none; counter-reset: toc; }
+    .toc li { display: flex; gap: 2mm; margin: 0 0 3mm; break-inside: avoid; counter-increment: toc; }
+    .toc li::before { content: counter(toc, decimal-leading-zero); color: var(--green-650); font-weight: 800; }
+    .status-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin: 6mm 0; }
+    .status-row div { padding: 4mm; border-radius: 7px; background: var(--green-950); color: white; }
+    .status-row span { display: block; color: #9ddbb8; font-size: 8pt; text-transform: uppercase; }
+    .status-row strong { display: block; margin-top: 1mm; font-size: 11pt; }
+    .flow { display: flex; align-items: stretch; gap: 2mm; margin: 5mm 0; break-inside: avoid; }
+    .flow div { flex: 1; padding: 3.5mm; border-radius: 6px; background: var(--green-100); text-align: center; }
+    .flow span { align-self: center; color: var(--green-650); font-size: 15pt; font-weight: 800; }
+    .small { color: var(--muted); font-size: 8.8pt; }
+    .footer {
+      position: absolute;
+      right: 17mm;
+      bottom: 7mm;
+      left: 17mm;
+      display: flex;
+      justify-content: space-between;
+      color: #6b7c72;
+      font-size: 8pt;
+    }
+    .page-break { break-before: page; }
+    .keep { break-inside: avoid; }
+    @page { size: A4; margin: 0; }
+    @media print {
+      body { background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      main { width: auto; box-shadow: none; }
+      .page { break-after: page; }
+      .page:last-child { break-after: auto; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <section class="page cover">
+    <div>
+      <div class="cover__mark">H</div>
+      <h1>Halal Delivery<br>Functional Specification</h1>
+      <h2>Client-facing overview of the customer marketplace, partner centre, administration, promotions, checkout and reporting POC.</h2>
+    </div>
+    <div class="cover__meta">
+      <strong>Version 1.0 — Current POC build</strong>
+      25 August 2026 · Application revision c7c8f3c
+    </div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">Document control</p>
+    <h1>Purpose and scope</h1>
+    <p class="lead">This document describes the observable functionality of the Halal Delivery proof of concept and provides current screenshots for client review. It covers every application role and the end-to-end flow from discovery through settlement reporting.</p>
+
+    <div class="status-row">
+      <div><span>Frontend</span><strong>React + Vite</strong></div>
+      <div><span>API</span><strong>Fastify</strong></div>
+      <div><span>Data</span><strong>PostgreSQL</strong></div>
+    </div>
+
+    <div class="callout">
+      <strong>POC status.</strong> Payment and confirmation email delivery are simulated. All basket pricing, promotions, order accounting and persistence are nevertheless calculated by the server to demonstrate the intended production control boundary.
+    </div>
+
+    <h2>Contents</h2>
+    <ol class="toc">
+      <li>Product and role overview</li>
+      <li>Access, sessions and POC testing</li>
+      <li>Public landing experience</li>
+      <li>Restaurant and grocery discovery</li>
+      <li>Restaurant storefront and menu</li>
+      <li>Basket, promotions and checkout</li>
+      <li>Customer account and reviews</li>
+      <li>Restaurant partner centre</li>
+      <li>Menu and profile governance</li>
+      <li>Promotion management</li>
+      <li>Team invitations</li>
+      <li>Platform administration</li>
+      <li>Finance and impact reporting</li>
+      <li>Business rules and controls</li>
+      <li>POC boundaries and next steps</li>
+    </ol>
+
+    <h2>Document conventions</h2>
+    <p>“Customer” means an ordering user. “Partner” means a restaurant owner or invited restaurant team member. “Admin” means a Halal Delivery platform operator. Monetary examples use euros and cents.</p>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>2</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">01 · Product overview</p>
+    <h1>Marketplace and operating roles</h1>
+    <p>Halal Delivery is a multi-sided food-delivery marketplace POC. Customers discover verified halal restaurants and groceries, configure menu items, receive automatic offers, select an optional charity impact allocation and place a simulated paid order. Partners manage their storefront and campaigns. Platform operators govern catalogue changes and reconcile commercial liabilities.</p>
+
+    <div class="grid-2">
+      <article class="card role">
+        <h3>Public visitor</h3>
+        <ul>
+          <li>Views the marketing landing page and social-impact proposition.</li>
+          <li>Searches and filters restaurants and grocery stores.</li>
+          <li>Views menus, fees, reviews and active offers.</li>
+          <li>Can register a customer account or sign in.</li>
+        </ul>
+      </article>
+      <article class="card role">
+        <h3>Customer</h3>
+        <ul>
+          <li>Configures products and maintains a restaurant-specific basket.</li>
+          <li>Receives the best eligible automatic promotion.</li>
+          <li>Chooses optional impact support and demo payment method.</li>
+          <li>Views orders and reviews confirmed purchases.</li>
+        </ul>
+      </article>
+      <article class="card role">
+        <h3>Restaurant partner</h3>
+        <ul>
+          <li>Views operational status and pending submissions.</li>
+          <li>Creates categories and submits governed menu/profile changes.</li>
+          <li>Publishes announcements and automatic promotions.</li>
+          <li>Invites additional restaurant team members.</li>
+        </ul>
+      </article>
+      <article class="card role">
+        <h3>Platform administrator</h3>
+        <ul>
+          <li>Approves menu and profile submissions.</li>
+          <li>Invites new restaurant owners.</li>
+          <li>Manages restaurant commission percentages.</li>
+          <li>Reviews monthly sales, liabilities, donations and audit detail.</li>
+        </ul>
+      </article>
+    </div>
+
+    <h2>Primary application routes</h2>
+    <table>
+      <thead><tr><th>Route</th><th>Purpose</th><th>Audience</th></tr></thead>
+      <tbody>
+        <tr><td><code>/</code></td><td>Marketing, location entry, restaurants, impact and causes</td><td>Public</td></tr>
+        <tr><td><code>/login</code></td><td>Sign in, account creation and POC role selection</td><td>All roles</td></tr>
+        <tr><td><code>/restaurants</code></td><td>Restaurant and grocery discovery</td><td>Public/customer</td></tr>
+        <tr><td><code>/restaurant/:slug</code></td><td>Restaurant storefront, menu, basket and checkout</td><td>Public/customer</td></tr>
+        <tr><td><code>/account</code></td><td>Customer order history and reviews</td><td>Customer</td></tr>
+        <tr><td><code>/restaurant-portal</code></td><td>Partner overview, menu, profile, offers and team</td><td>Partner</td></tr>
+        <tr><td><code>/admin</code></td><td>Approvals, invitations, agreements and reporting</td><td>Admin</td></tr>
+        <tr><td><code>/restaurant-invite/:token</code></td><td>Secure invitation acceptance and account setup</td><td>Invited partner</td></tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>3</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">02 · Access and sessions</p>
+    <h1>Authentication and POC role testing</h1>
+    <p>The login experience supports manual email/password authentication, customer self-registration and an optional Google Identity integration. Sessions are stored in secure host cookies and expire automatically.</p>
+
+    <h2>Public POC testing hub</h2>
+    <p>On a non-loopback development or ngrok host, the login page displays explicit Customer, Admin and Restaurant role buttons. Each button stays on the current public origin, selects a <code>pocRole</code> query parameter and prefills the corresponding demo credentials.</p>
+    <div class="callout callout--gold">
+      <strong>Public-session rule.</strong> A public ngrok hostname has one cookie session. Testers must sign out before changing roles and must test roles sequentially.
+    </div>
+    <figure class="shot-tall">
+      <img src="screenshots/02-public-poc-login.png" alt="Public POC login page with customer, admin and restaurant role buttons">
+      <figcaption>Figure 1 — Public POC login hub with same-origin role selection and customer credentials prefilled.</figcaption>
+    </figure>
+
+    <h2>Local isolated testing</h2>
+    <p>Local development preserves independent sessions by using three loopback hosts:</p>
+    <table>
+      <thead><tr><th>Role</th><th>Local URL</th><th>Demo account</th></tr></thead>
+      <tbody>
+        <tr><td>Customer</td><td><code>http://127.0.0.1:5173/login</code></td><td>customer@halaldelivery.demo</td></tr>
+        <tr><td>Administrator</td><td><code>http://127.0.0.2:5173/login</code></td><td>admin@halaldelivery.demo</td></tr>
+        <tr><td>Restaurant owner</td><td><code>http://127.0.0.3:5173/login</code></td><td>owner@emberandolive.demo</td></tr>
+      </tbody>
+    </table>
+    <p class="small">The testing panel and credential prefill are automatically available in development. A production build hides them unless <code>VITE_ENABLE_POC_TESTING=true</code> is explicitly enabled.</p>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>4</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">03 · Public experience</p>
+    <h1>Landing page and marketplace proposition</h1>
+    <p>The public landing page introduces the marketplace, requests a delivery location and explains how every order can create community impact. The page provides direct navigation to restaurant discovery, the impact story, supported causes, customer login and partner access.</p>
+    <figure>
+      <img src="screenshots/01-public-landing.png" alt="Halal Delivery public landing page">
+      <figcaption>Figure 2 — Public landing page with location search, verified restaurant proposition and social-impact messaging.</figcaption>
+    </figure>
+    <div class="grid-2">
+      <article class="card">
+        <h3>Customer proposition</h3>
+        <ul>
+          <li>Verified halal marketplace positioning.</li>
+          <li>Delivery-location entry and restaurant discovery call to action.</li>
+          <li>Restaurant cards and direct menu navigation.</li>
+          <li>English and Dutch language controls.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Impact proposition</h3>
+        <ul>
+          <li>Explains that donations come from platform commission.</li>
+          <li>Profiles participating charitable organisations.</li>
+          <li>Allows customers to select up to three causes at checkout.</li>
+          <li>Keeps donations separate from restaurant payable amounts.</li>
+        </ul>
+      </article>
+    </div>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>5</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">04 · Discovery</p>
+    <h1>Restaurant and grocery discovery</h1>
+    <p>The discovery screen supports delivery and collection modes, restaurant and grocery business types, address entry, search, sorting and multi-faceted filtering. The corrected brand container keeps the supplied portrait logo fully visible and centred.</p>
+    <figure>
+      <img src="screenshots/03-restaurant-discovery.png" alt="Restaurant discovery page with fully visible Halal Delivery logo">
+      <figcaption>Figure 3 — Restaurant discovery with contained logo, mode switch, cuisine rail, filters and restaurant cards.</figcaption>
+    </figure>
+
+    <h2>Available discovery controls</h2>
+    <div class="grid-2">
+      <article class="card">
+        <h3>Find and refine</h3>
+        <ul>
+          <li>Search by restaurant, shop, cuisine or grocery category.</li>
+          <li>Switch between restaurants and groceries.</li>
+          <li>Filter free delivery, favourites, rating, opening status and offers.</li>
+          <li>Filter individual cuisines through checkboxes or visual shortcuts.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Compare places</h3>
+        <ul>
+          <li>Sort by best match, delivery speed or rating.</li>
+          <li>View halal verification status and closed status.</li>
+          <li>Compare delivery estimate, delivery fee and free-delivery threshold.</li>
+          <li>Favourite and revisit selected restaurants in the current session.</li>
+        </ul>
+      </article>
+    </div>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>6</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">05 · Restaurant storefront</p>
+    <h1>Menu, restaurant information and offers</h1>
+    <p>Each restaurant has a dedicated branded storefront. The hero presents verification, description, rating, delivery estimate, opening hours and the current offer. Customers can open reviews, restaurant information, offer details and a clear fee explanation.</p>
+    <figure>
+      <img src="screenshots/04-restaurant-storefront.png" alt="Forno Halal Pizza storefront and menu">
+      <figcaption>Figure 4 — Restaurant storefront with active offer, fee summary, category navigation, menu and persistent basket.</figcaption>
+    </figure>
+
+    <h2>Menu behaviour</h2>
+    <ul>
+      <li>Search across item names and descriptions.</li>
+      <li>Jump between menu categories and browse responsive product cards.</li>
+      <li>Show popularity, offer and availability labels.</li>
+      <li>View ingredients, declared allergens, VAT and availability details.</li>
+      <li>Prevent ordering while a restaurant or item is unavailable.</li>
+      <li>Recommend a supplementary item after products are added.</li>
+    </ul>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>7</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">05 · Configurable products</p>
+    <h1>Modifiers and customer item notes</h1>
+    <p>Products such as pizzas, burgers, kebabs, meals, drinks and milkshakes can use reusable modifier templates. Required and optional groups are rendered as accessible radio-button or checkbox selections, with extra-price adjustments calculated into the line price.</p>
+    <figure class="shot-tall">
+      <img src="screenshots/05-menu-item-options.png" alt="Menu item modifier modal">
+      <figcaption>Figure 5 — Product configuration with required size and sauce choices, optional additions, quantity and special instructions.</figcaption>
+    </figure>
+
+    <h2>Configuration rules</h2>
+    <ul>
+      <li>Required modifier groups must be completed before the product can be added.</li>
+      <li>Multiple-choice groups enforce configured maximum selection counts.</li>
+      <li>Price deltas are shown per option and included in basket/checkout totals.</li>
+      <li>The same product with different options or notes remains a separate basket line.</li>
+      <li>Customers may add a free-text instruction of up to 300 characters.</li>
+      <li>Item notes are explicitly not accepted as allergy declarations.</li>
+    </ul>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>8</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">06 · Promotions</p>
+    <h1>Automatic offer selection</h1>
+    <p>The basket previews eligible automatic promotions as items are added. Quantity campaigns can prompt the customer to add another qualifying item. Announcements are displayed as messages only and never change totals.</p>
+    <figure>
+      <img src="screenshots/06-basket-automatic-promotion.png" alt="Quantity promotion prompt and discounted basket">
+      <figcaption>Figure 6 — Quantity-offer prompt with the discounted basket visible behind it.</figcaption>
+    </figure>
+
+    <div class="callout">
+      <strong>One-winner stacking policy.</strong> The engine evaluates every eligible active order-value and quantity offer, applies only the offer with the greatest customer saving, includes delivery savings in the comparison and resolves equal savings deterministically by promotion ID.
+    </div>
+
+    <h2>Supported promotion types</h2>
+    <table>
+      <thead><tr><th>Type</th><th>Rule options</th><th>Financial effect</th></tr></thead>
+      <tbody>
+        <tr><td>Promotional announcement</td><td>Title, message, enabled state and campaign dates</td><td>None</td></tr>
+        <tr><td>Order-value offer</td><td>Percentage, fixed euro amount or free delivery; optional minimum food order</td><td>Discounts food or delivery</td></tr>
+        <tr><td>Quantity offer</td><td>Buy/reward quantities, reward percentage and qualifying/reward scopes</td><td>Discounts eligible item units</td></tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>9</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">06 · Checkout</p>
+    <h1>Order review, impact and payment simulation</h1>
+    <p>The checkout drawer consolidates order review, the optional impact choice and payment selection in one flow. It shows the selected promotion, exact savings, delivery and service fees, and the final server-payable amount.</p>
+    <figure>
+      <img src="screenshots/07-checkout-and-donation.png" alt="Checkout drawer showing promotion, impact choice and payment">
+      <figcaption>Figure 7 — Checkout review with a buy-one-get-one discount, optional charity contribution and simulated payment.</figcaption>
+    </figure>
+
+    <h2>Authoritative checkout sequence</h2>
+    <div class="flow">
+      <div>1. Send item IDs, quantities, modifiers and note snapshots</div><span>›</span>
+      <div>2. Reload menu prices and active rules on the server</div><span>›</span>
+      <div>3. Select one best automatic offer</div><span>›</span>
+      <div>4. Reconcile payment and settlement totals</div>
+    </div>
+    <ul>
+      <li>Basket savings are previews only; the server never trusts a client-provided saving.</li>
+      <li>Percentage offers are rounded deterministically and fixed discounts cannot reduce food subtotal below zero.</li>
+      <li>Free-delivery offers zero the actual otherwise-payable delivery fee.</li>
+      <li>Service fee, commission, payment fee, donation basis, restaurant payable and platform fee are recomputed from discounted values.</li>
+      <li>Credit card and iDEAL/Wero are demonstration choices; no real payment credentials are processed.</li>
+      <li>A successful POC payment creates an order, order-item snapshots, promotion snapshot and confirmation-email simulation.</li>
+    </ul>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>10</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">07 · Customer account</p>
+    <h1>Order history, receipts and reviews</h1>
+    <p>Signed-in customers can open their account to see confirmed orders. Each record retains restaurant and item details, gross payment, donation amount, email status and the applied promotion title and savings.</p>
+    <figure>
+      <img src="screenshots/08-customer-order-history.png" alt="Customer order history">
+      <figcaption>Figure 8 — Customer account with confirmed order history, totals and review state.</figcaption>
+    </figure>
+    <h2>Review eligibility</h2>
+    <ul>
+      <li>Only the customer who placed the order may submit its review.</li>
+      <li>The order must be confirmed and its confirmation email must be recorded as sent.</li>
+      <li>A customer can review each eligible order once and can update that review.</li>
+      <li>Verified-order ratings contribute to restaurant ratings shown in discovery and the storefront.</li>
+    </ul>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>11</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">08 · Partner centre</p>
+    <h1>Restaurant operational overview</h1>
+    <p>The partner centre is a role-protected workspace with five sections: Overview, Menu manager, Restaurant profile, Offers and Team members. The overview gives a concise operational status and routes the owner to common tasks.</p>
+    <figure>
+      <img src="screenshots/09-partner-overview.png" alt="Restaurant partner overview">
+      <figcaption>Figure 9 — Partner overview showing published items, submissions awaiting review and profile verification.</figcaption>
+    </figure>
+    <h2>Overview information</h2>
+    <ul>
+      <li>Published item count and category count.</li>
+      <li>Number of catalogue or profile submissions awaiting admin review.</li>
+      <li>Halal/profile verification status.</li>
+      <li>Recent submissions with category, price and workflow status.</li>
+      <li>Customer-facing restaurant profile preview.</li>
+    </ul>
+    <div class="callout">
+      <strong>Governance model.</strong> Catalogue and profile submissions are stored separately from live customer content. They go live only after an administrator approves them.
+    </div>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>12</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">09 · Menu governance</p>
+    <h1>Categories and menu submissions</h1>
+    <p>Partners can create and rename menu categories immediately for use inside the workspace. New menu items enter a governed review workflow and do not overwrite the published customer menu.</p>
+    <figure>
+      <img src="screenshots/10-menu-management.png" alt="Restaurant menu management screen">
+      <figcaption>Figure 10 — Menu manager with category controls, menu-item form, validation checklist and customer preview.</figcaption>
+    </figure>
+    <h2>Menu item data</h2>
+    <div class="grid-2">
+      <article class="card">
+        <h3>Commercial and display</h3>
+        <ul>
+          <li>Name, category and useful description.</li>
+          <li>Price including VAT and a 9% or 21% VAT classification.</li>
+          <li>Availability window and landscape image URL.</li>
+          <li>Customer preview before submission.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Food safety and configuration</h3>
+        <ul>
+          <li>Ingredient declaration and EU 14 allergen selection.</li>
+          <li>Standard or configurable item type.</li>
+          <li>Reusable modifier template with editable groups/options.</li>
+          <li>Required/default options and bounded extra prices.</li>
+        </ul>
+      </article>
+    </div>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>13</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">09 · Profile governance</p>
+    <h1>Restaurant profile and checkout settings</h1>
+    <p>Partners can propose updates to the customer-facing brand, address, operating hours and fee settings. Submitted changes follow the same approval trail as menu items.</p>
+    <figure>
+      <img src="screenshots/11-restaurant-profile.png" alt="Restaurant profile management screen">
+      <figcaption>Figure 11 — Restaurant profile editor with brand, opening, delivery and service-fee settings.</figcaption>
+    </figure>
+    <h2>Managed profile fields</h2>
+    <ul>
+      <li>Trading name, description and restaurant address.</li>
+      <li>Logo URL and storefront landing image URL.</li>
+      <li>Opening and closing times.</li>
+      <li>Minimum food-order amount and delivery fee.</li>
+      <li>Optional free-delivery threshold.</li>
+      <li>Percentage service fee and maximum service-fee cap.</li>
+    </ul>
+    <p>Approved values are shown to customers and snapshotted at checkout so historical orders remain explainable even after profile settings change.</p>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>14</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">10 · Campaigns</p>
+    <h1>Promotion guidance and campaign calendar</h1>
+    <p>The Offers workspace contains a built-in guide, worked examples, a campaign editor and a calendar of existing campaigns. Promotions publish directly for the POC and are visible only when enabled and within their configured start/end window.</p>
+    <figure>
+      <img src="screenshots/12-promotion-guide.png" alt="Promotion help panel">
+      <figcaption>Figure 12 — “How offers work” guidance with order-value, quantity and message-only examples.</figcaption>
+    </figure>
+
+    <h2>Message-only announcements</h2>
+    <p>A promotional announcement is a distinct campaign type for scheduled storefront messages such as “Something special is coming this weekend”. The interface explicitly states that announcements never affect basket or checkout totals. Legacy manual <code>order_offer</code> records are treated as announcements for backward compatibility.</p>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>15</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">10 · Automatic order-value offers</p>
+    <h1>Percentage, fixed amount and free delivery</h1>
+    <p>Partners can create automatic order-value campaigns using explicit, validated financial rules. An optional minimum is always evaluated against the eligible pre-discount food subtotal.</p>
+    <figure>
+      <img src="screenshots/13-order-value-promotion-editor.png" alt="Order-value promotion editor">
+      <figcaption>Figure 13 — Order-value promotion editor with rule selection, threshold, schedule and campaign preview.</figcaption>
+    </figure>
+    <table>
+      <thead><tr><th>Rule</th><th>Validation</th><th>Calculation</th></tr></thead>
+      <tbody>
+        <tr><td>Percentage off food</td><td>Whole percentage from 1 to 100</td><td>Percentage of eligible food subtotal, deterministically rounded</td></tr>
+        <tr><td>Fixed euro discount</td><td>Positive value, bounded to €1,000 in portal input</td><td>Fixed cents capped at the food subtotal</td></tr>
+        <tr><td>Free delivery</td><td>No discount value; optional non-negative minimum</td><td>Removes the delivery fee that would otherwise be charged</td></tr>
+      </tbody>
+    </table>
+    <h2>Quantity-offer configuration</h2>
+    <p>Quantity offers provide buy-one-get-one, cheapest-free, second-item-half-price and custom presets. Partners configure buy quantity, reward quantity, reward percentage and qualifying/reward scope across the whole menu, selected categories or selected items.</p>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>16</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">11 · Restaurant team</p>
+    <h1>Team-member invitations</h1>
+    <p>Restaurant owners can invite additional workspace users through a secure, single-use link. The invitation is tied to the restaurant and intended role, expires after seven days and requires the invited user to choose a password.</p>
+    <figure>
+      <img src="screenshots/14-team-management.png" alt="Restaurant team management screen">
+      <figcaption>Figure 14 — Team member list and secure invitation creation.</figcaption>
+    </figure>
+    <h2>Invitation flow</h2>
+    <div class="flow">
+      <div>Owner enters team email</div><span>›</span>
+      <div>Server issues a single-use token</div><span>›</span>
+      <div>Owner shares generated link</div><span>›</span>
+      <div>Invitee creates account and enters portal</div>
+    </div>
+    <ul>
+      <li>The generated link can be copied from the workspace.</li>
+      <li>Existing and invited team members are visible to the owner.</li>
+      <li>The invited account is linked to the correct restaurant before portal redirection.</li>
+    </ul>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>17</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">12 · Platform administration</p>
+    <h1>Approval centre and commercial terms</h1>
+    <p>The admin workspace presents pending catalogue and profile work alongside restaurant onboarding and commercial controls. Platform operators can review validated menu submissions and publish them to the customer storefront.</p>
+    <figure>
+      <img src="screenshots/15-admin-approval-centre.png" alt="Admin approval centre">
+      <figcaption>Figure 15 — Admin approval centre with queue metrics, menu review, restaurant invitation and commission agreements.</figcaption>
+    </figure>
+    <h2>Administrative functions</h2>
+    <div class="grid-2">
+      <article class="card">
+        <h3>Governance</h3>
+        <ul>
+          <li>Search and approve menu submissions.</li>
+          <li>Approve customer-facing profile changes.</li>
+          <li>See allergens, VAT and price before publication.</li>
+          <li>Refresh the approval queue on demand.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Commercial operations</h3>
+        <ul>
+          <li>Create seven-day restaurant-owner invitations.</li>
+          <li>Set commission percentage per restaurant.</li>
+          <li>See pending and sent invitation counts.</li>
+          <li>Reset deterministic POC data only after explicit confirmation.</li>
+        </ul>
+      </article>
+    </div>
+    <div class="callout callout--gold">
+      <strong>POC reset protection.</strong> Reset is deliberately destructive to POC-tagged data and requires a browser confirmation plus the server confirmation phrase. It is not part of normal operations.
+    </div>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>18</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">13 · Finance and impact</p>
+    <h1>Monthly settlement report</h1>
+    <p>The monthly report turns paid-order snapshots into a traceable operational ledger. It distinguishes cash received from liabilities and platform revenue, and can be printed for settlement review.</p>
+    <figure>
+      <img src="screenshots/16-finance-and-impact-report.png" alt="Monthly finance and impact report">
+      <figcaption>Figure 16 — Monthly summary, charity schedule, restaurant sales split and order audit trail.</figcaption>
+    </figure>
+    <h2>Report contents</h2>
+    <ul>
+      <li>Paid-order count and gross sales received.</li>
+      <li>Total customer promotion savings, including delivery savings.</li>
+      <li>Restaurant payable, charity payable, contracted commission and payment fees.</li>
+      <li>Net amount retained after donations and payment fees.</li>
+      <li>Charity settlement schedule with contributing-order count and payout status.</li>
+      <li>Restaurant sales split by order count, agreed rate, gross, commission and amount owed.</li>
+      <li>Order-level audit trail with promotion snapshot and donation allocation.</li>
+    </ul>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>19</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">14 · Financial controls</p>
+    <h1>Settlement and reconciliation rules</h1>
+    <p>Every confirmed order stores enough immutable information to explain the customer payment and downstream settlement. The API rejects a checkout if its financial invariants do not reconcile.</p>
+
+    <h2>Core reconciliation</h2>
+    <table>
+      <thead><tr><th>Value</th><th>Rule</th></tr></thead>
+      <tbody>
+        <tr><td>Original food subtotal</td><td>Sum of authoritative menu prices, modifier deltas and quantities before promotion</td></tr>
+        <tr><td>Discounted food subtotal</td><td>Original food subtotal less the selected food-promotion saving, never below zero</td></tr>
+        <tr><td>Delivery payable</td><td>Configured delivery fee less free-delivery saving, never below zero</td></tr>
+        <tr><td>Gross/payment amount</td><td>Discounted food subtotal + delivery payable + capped service fee</td></tr>
+        <tr><td>Commission</td><td>Restaurant agreement percentage applied to discounted food subtotal</td></tr>
+        <tr><td>Restaurant payable</td><td>Discounted food subtotal + delivery payable − commission</td></tr>
+        <tr><td>Platform fee</td><td>Commission + service fee</td></tr>
+        <tr><td>Donation basis</td><td>Optional share of platform commission; never deducted from restaurant payable</td></tr>
+        <tr><td>Payment fee</td><td>Calculated from the discounted gross/payment amount</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Stored order snapshot</h2>
+    <ul>
+      <li>Original and discounted food subtotals.</li>
+      <li>Food-promotion and delivery-discount amounts.</li>
+      <li>Applied promotion ID, title and type.</li>
+      <li>Delivery fee, service fee, gross paid, commission and payment fee.</li>
+      <li>Restaurant payable, platform fee and donation allocations.</li>
+      <li>Item names, quantities, configured option summaries and customer notes.</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Future payment integration.</strong> A Stripe PaymentIntent or other real payment request must use the server-reconciled gross amount. The client basket remains a preview and must never define the amount charged.
+    </div>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>20</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">14 · Controls and quality</p>
+    <h1>Validation, security and compatibility</h1>
+    <div class="grid-2">
+      <article class="card">
+        <h3>Role and session controls</h3>
+        <ul>
+          <li>API paths enforce customer, partner or admin role requirements.</li>
+          <li>Password hashes use Argon2.</li>
+          <li>Session cookies are host-only and expire automatically.</li>
+          <li>Invitation tokens are single use and time limited.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Promotion validation</h3>
+        <ul>
+          <li>Percentage must be 1–100.</li>
+          <li>Fixed cents must be positive and bounded.</li>
+          <li>Minimum order must be non-negative.</li>
+          <li>Dates must be valid and end after start.</li>
+          <li>Malformed type/rule combinations are rejected.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Catalogue validation</h3>
+        <ul>
+          <li>Required names, descriptions, price, VAT and image URL.</li>
+          <li>Ingredient and allergen review data.</li>
+          <li>Bounded modifier groups, options, defaults and price deltas.</li>
+          <li>Approval isolation between submission and published record.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3>Backward compatibility</h3>
+        <ul>
+          <li>Legacy <code>order_offer</code> rows continue to load.</li>
+          <li>Legacy manual rows map to message-only announcements.</li>
+          <li>Database additions use compatible schema evolution.</li>
+          <li>Historical order snapshots do not depend on current rules.</li>
+        </ul>
+      </article>
+    </div>
+
+    <h2>Language and responsive behaviour</h2>
+    <p>The customer-facing landing, login, storefront, basket and checkout expose English/Dutch controls. Major customer screens adapt to desktop and mobile layouts. Interactive controls use labels, semantic buttons and visible focus/selection states; modal surfaces identify themselves as dialogs.</p>
+
+    <h2>Fixed development services</h2>
+    <table>
+      <thead><tr><th>Service</th><th>Endpoint</th><th>Port policy</th></tr></thead>
+      <tbody>
+        <tr><td>Web application</td><td><code>http://127.0.0.1:5173</code></td><td>Fixed; Vite fails rather than choosing another port</td></tr>
+        <tr><td>Application API</td><td><code>http://127.0.0.1:3001</code></td><td>Fixed</td></tr>
+        <tr><td>PostgreSQL</td><td><code>localhost:55433</code></td><td>Fixed host mapping</td></tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>21</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">15 · POC boundaries</p>
+    <h1>Current limitations and production follow-up</h1>
+    <p>The POC demonstrates the intended user journeys, governance model and financial calculations. The following integrations and operational capabilities remain outside the current scope.</p>
+
+    <table>
+      <thead><tr><th>Area</th><th>Current POC behaviour</th><th>Production follow-up</th></tr></thead>
+      <tbody>
+        <tr><td>Payments</td><td>Simulated card and iDEAL/Wero confirmation</td><td>Payment provider, webhooks, refunds, disputes and payout controls</td></tr>
+        <tr><td>Email</td><td>Confirmation status recorded as simulated/sent</td><td>Transactional provider, templates, retries and delivery events</td></tr>
+        <tr><td>Google sign-in</td><td>Available only when a Google client ID is configured</td><td>Production OAuth origins, consent and account-linking policy</td></tr>
+        <tr><td>Media</td><td>Image URLs are entered directly</td><td>Managed upload, moderation, resizing and storage</td></tr>
+        <tr><td>Operations</td><td>Opening state and demo order acceptance</td><td>Live order dispatch, preparation workflow, courier tracking and cancellation</td></tr>
+        <tr><td>Location</td><td>POC geocoding and seeded delivery radii</td><td>Address validation, routing, distance pricing and coverage rules</td></tr>
+        <tr><td>Compliance</td><td>Functional allergen, VAT and halal-status fields</td><td>Legal review, privacy, retention, audit policy and certification workflow</td></tr>
+        <tr><td>Reporting</td><td>Monthly operational ledger and print view</td><td>Exports, accounting integration, payout batches and reconciliation exceptions</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Client acceptance focus</h2>
+    <ol>
+      <li>Confirm the public customer journey, wording and visual identity.</li>
+      <li>Confirm partner catalogue/profile approval responsibilities.</li>
+      <li>Confirm the three promotion types and one-winner stacking policy.</li>
+      <li>Confirm commercial settlement definitions and donation treatment.</li>
+      <li>Prioritise production integrations and operational workflows.</li>
+    </ol>
+
+    <div class="callout">
+      <strong>Public POC endpoint at document creation:</strong><br>
+      <code>https://contrastively-xanthophyllous-dung.ngrok-free.dev/login?pocRole=customer</code><br>
+      <span class="small">The ngrok hostname is temporary and may change when the development tunnel restarts.</span>
+    </div>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>22</span></div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">Appendix A</p>
+    <h1>Demonstration accounts</h1>
+    <p>These accounts are intentionally seeded for POC demonstrations and must not be used as production credentials.</p>
+    <table>
+      <thead><tr><th>Role</th><th>Email</th><th>Password</th><th>Expected landing</th></tr></thead>
+      <tbody>
+        <tr><td>Customer</td><td>customer@halaldelivery.demo</td><td><code>CustomerDemo!2026</code></td><td><code>/restaurants</code></td></tr>
+        <tr><td>Restaurant owner</td><td>owner@emberandolive.demo</td><td><code>RestaurantDemo!2026</code></td><td><code>/restaurant-portal</code></td></tr>
+        <tr><td>Platform admin</td><td>admin@halaldelivery.demo</td><td><code>AdminDemo!2026</code></td><td><code>/admin</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2>Screenshot register</h2>
+    <table>
+      <thead><tr><th>Figure</th><th>Screen</th><th>Key functionality evidenced</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Public POC login</td><td>Same-origin role buttons, prefill and sequential-session warning</td></tr>
+        <tr><td>2</td><td>Landing page</td><td>Marketplace proposition, location and impact</td></tr>
+        <tr><td>3</td><td>Discovery</td><td>Corrected logo, filters, cards and service modes</td></tr>
+        <tr><td>4</td><td>Storefront</td><td>Menu, offer, fees, opening and basket</td></tr>
+        <tr><td>5</td><td>Product options</td><td>Modifiers, price deltas, quantity and notes</td></tr>
+        <tr><td>6</td><td>Promotion prompt</td><td>Quantity reward and basket discount preview</td></tr>
+        <tr><td>7</td><td>Checkout</td><td>Promotion, impact, payment and final total</td></tr>
+        <tr><td>8</td><td>Customer account</td><td>Order history, receipt data and review eligibility</td></tr>
+        <tr><td>9–14</td><td>Partner centre</td><td>Overview, menu, profile, campaigns and team</td></tr>
+        <tr><td>15–16</td><td>Admin</td><td>Approvals, commercial terms and monthly settlement</td></tr>
+      </tbody>
+    </table>
+    <div class="footer"><span>Halal Delivery Functional Specification</span><span>23</span></div>
+  </section>
+</main>
+</body>
+</html>

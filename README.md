@@ -4,6 +4,14 @@ Halal Delivery is a proof-of-concept food delivery marketplace: a React, TanStac
 TanStack Router, Vite, Fastify, and PostgreSQL application with customer, restaurant-owner,
 and admin portals.
 
+## Functional specification
+
+The client-facing application overview, complete role workflows, business rules, and current
+screenshots are available in:
+
+- [`docs/Halal-Delivery-Functional-Specification.pdf`](docs/Halal-Delivery-Functional-Specification.pdf)
+- [`docs/Halal-Delivery-Functional-Specification.html`](docs/Halal-Delivery-Functional-Specification.html)
+
 ## Prerequisites
 
 - Node.js 20+ and [pnpm](https://pnpm.io/)
