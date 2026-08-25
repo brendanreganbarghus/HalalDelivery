@@ -34,9 +34,11 @@ import {
   type SelectedOptions,
 } from './modifiers.ts'
 import {
-  calculateQuantityPromotionDiscount,
+  describeOrderValuePromotion,
   describeQuantityPromotion,
   isQuantityPromotionType,
+  selectBestAutomaticPromotion,
+  toOrderValuePromotionRule,
   toQuantityPromotionRule,
   type PromotionNameLookup,
   type PromotionOrderLine,
@@ -214,21 +216,25 @@ export function RestaurantPage() {
       quantity: line.quantity,
     })),
   ]
-  const promotionResult = promotionRule
-    ? calculateQuantityPromotionDiscount(promotionLines, promotionRule)
-    : null
-  const promotionDiscount = promotionResult?.discountCents ?? 0
+  const baseDelivery =
+    restaurant?.free_delivery_threshold_cents !== null &&
+    restaurant?.free_delivery_threshold_cents !== undefined &&
+    menuSubtotal >= restaurant.free_delivery_threshold_cents
+      ? 0
+      : (restaurant?.delivery_fee_cents ?? 0)
+  const appliedPromotion = selectBestAutomaticPromotion(
+    restaurant?.offers.filter((offer) => offer.status === 'active') ?? [],
+    promotionLines,
+    menuSubtotal,
+    baseDelivery,
+  )
+  const promotionDiscount = appliedPromotion?.foodDiscountCents ?? 0
   const promotionNameLookup: PromotionNameLookup = useMemo(() => ({
     categoryNameById: Object.fromEntries((restaurant?.menu ?? []).map((category) => [category.id, category.name])),
     itemNameById: Object.fromEntries(allItems.map((item) => [item.id, item.name])),
   }), [restaurant, allItems])
   const subtotal = menuSubtotal - promotionDiscount
-  const delivery =
-    restaurant?.free_delivery_threshold_cents !== null &&
-    restaurant?.free_delivery_threshold_cents !== undefined &&
-    subtotal >= restaurant.free_delivery_threshold_cents
-      ? 0
-      : (restaurant?.delivery_fee_cents ?? 0)
+  const delivery = baseDelivery - (appliedPromotion?.deliveryDiscountCents ?? 0)
   const service = restaurant
     ? Math.min(Math.round(subtotal * restaurant.service_fee_bps / 10_000), restaurant.service_fee_cap_cents)
     : 0
@@ -389,10 +395,10 @@ export function RestaurantPage() {
                   {lines.map(({ item, quantity }) => <div key={item.id}><p><strong>{item.name}</strong><small>{formatMoney(language, item.price_cents / 100)}</small></p><div><button type="button" onClick={() => changeQuantity(item.id, -1)}><Minus /></button><span>{quantity}</span><button type="button" onClick={() => changeQuantity(item.id, 1)}><Plus /></button></div></div>)}
                   {priceLines.map((line) => <div key={line.lineId}><p><strong>{line.itemName}</strong>{line.selectionSummary && <small>{line.selectionSummary}</small>}{line.note && <small className="basket__line-note">“{line.note}”</small>}<small className="basket__line-options">{formatMoney(language, line.unitPriceCents / 100)}</small></p><div><button type="button" onClick={() => changeConfiguredLineQuantity(line.lineId, -1)}><Minus /></button><span>{line.quantity}</span><button type="button" onClick={() => changeConfiguredLineQuantity(line.lineId, 1)}><Plus /></button></div></div>)}
                 </div>
-                <div className="basket__totals"><p><span>{t.subtotal}</span><strong>{formatMoney(language, menuSubtotal / 100)}</strong></p>{promotionDiscount > 0 && <p className="basket__discount"><span>{t.promotionDiscount}{promotionRule && <small>{describeQuantityPromotion(promotionRule, promotionNameLookup)}</small>}</span><strong>− {formatMoney(language, promotionDiscount / 100)}</strong></p>}<p><span>{t.delivery}</span><strong>{formatMoney(language, delivery / 100)}</strong></p><p><span>{t.service} {restaurant.service_fee_bps / 100}%</span><strong>{formatMoney(language, service / 100)}</strong></p><p className="basket__total"><span>{t.total}</span><strong>{formatMoney(language, total / 100)}</strong></p></div>
+                <div className="basket__totals"><p><span>{t.subtotal}</span><strong>{formatMoney(language, menuSubtotal / 100)}</strong></p>{appliedPromotion && promotionDiscount > 0 && <p className="basket__discount"><span>{appliedPromotion.title}<small>{language === 'nl' ? 'Beste automatische aanbieding toegepast' : 'Best automatic offer applied'}</small></span><strong>− {formatMoney(language, promotionDiscount / 100)}</strong></p>}<p><span>{t.delivery}{appliedPromotion?.deliveryDiscountCents ? <small>{appliedPromotion.title} · {language === 'nl' ? 'gratis bezorging' : 'free delivery'}</small> : null}</span><strong>{appliedPromotion?.deliveryDiscountCents ? <><s>{formatMoney(language, baseDelivery / 100)}</s>{' '}</> : null}{formatMoney(language, delivery / 100)}</strong></p><p><span>{t.service} {restaurant.service_fee_bps / 100}%</span><strong>{formatMoney(language, service / 100)}</strong></p><p className="basket__total"><span>{t.total}</span><strong>{formatMoney(language, total / 100)}</strong></p></div>
                 {recommendation && <div className="basket__recommendation"><strong>{t.forgot}</strong><button type="button" onClick={() => addItem(recommendation)}><span>{recommendation.name}<small>{formatMoney(language, recommendation.price_cents / 100)}</small></span><Plus /></button></div>}
-                <button className="basket__checkout" disabled={!restaurant.accepting_orders || subtotal < restaurant.minimum_order_cents} type="button" onClick={() => setCheckoutOpen(true)}><span>{restaurant.accepting_orders ? t.checkout : t.closed}</span><strong>{formatMoney(language, total / 100)}</strong></button>
-                {subtotal < restaurant.minimum_order_cents && <small className="basket__minimum">{t.minimum}: {formatMoney(language, restaurant.minimum_order_cents / 100)}</small>}
+                <button className="basket__checkout" disabled={!restaurant.accepting_orders || menuSubtotal < restaurant.minimum_order_cents} type="button" onClick={() => setCheckoutOpen(true)}><span>{restaurant.accepting_orders ? t.checkout : t.closed}</span><strong>{formatMoney(language, total / 100)}</strong></button>
+                {menuSubtotal < restaurant.minimum_order_cents && <small className="basket__minimum">{t.minimum}: {formatMoney(language, restaurant.minimum_order_cents / 100)}</small>}
               </>
             )}
           </aside>
@@ -456,7 +462,8 @@ function StorefrontPanel({ restaurant, panel, onClose, language }: { restaurant:
     {panel === 'reviews' && <div className="review-list">{restaurant.reviews.map((review) => <article key={review.id}><div><strong>{review.display_name}</strong><span><Star fill="currentColor" /> {review.rating}</span></div><p>{review.comment}</p><small><BadgeCheck /> {t.verified} · {new Date(review.created_at).toLocaleDateString(language === 'nl' ? 'nl-NL' : 'en-GB')}</small></article>)}{restaurant.reviews.length === 0 && <p>—</p>}</div>}
     {panel === 'info' && <dl><div><dt>{t.open}</dt><dd>{restaurant.opening_time.slice(0, 5)}–{restaurant.closing_time.slice(0, 5)}</dd></div><div><dt>Address</dt><dd>{restaurant.address}</dd></div><div><dt>{t.minimum}</dt><dd>{formatMoney(language, restaurant.minimum_order_cents / 100)}</dd></div><div><dt>{t.delivery}</dt><dd>{formatMoney(language, restaurant.delivery_fee_cents / 100)}</dd></div></dl>}
     {panel === 'offers' && <div className="offer-list">{restaurant.offers.map((offer) => {
-      const rule = toQuantityPromotionRule(offer)
+      const quantityRule = toQuantityPromotionRule(offer)
+      const orderValueRule = toOrderValuePromotionRule(offer)
       return (
         <article className={`offer-list__${offer.status}`} key={offer.id}>
           <Tag />
@@ -464,8 +471,10 @@ function StorefrontPanel({ restaurant, panel, onClose, language }: { restaurant:
             <span>{offer.status}</span>
             <h3>{offer.title}</h3>
             <p>{offer.description}</p>
-            {rule && <p className="offer-list__rule">{describeQuantityPromotion(rule, nameLookup)}</p>}
-            {offer.minimum_order_cents !== null && <small>{t.minimum}: {formatMoney(language, offer.minimum_order_cents / 100)}</small>}
+            {quantityRule && <p className="offer-list__rule">{describeQuantityPromotion(quantityRule, nameLookup)}</p>}
+            {orderValueRule && <p className="offer-list__rule">{describeOrderValuePromotion(orderValueRule)}</p>}
+            {!quantityRule && !orderValueRule && <p className="offer-list__rule">Promotional announcement · no checkout discount</p>}
+            {(quantityRule || orderValueRule) && offer.minimum_order_cents !== null && <small>{t.minimum}: {formatMoney(language, offer.minimum_order_cents / 100)}</small>}
           </div>
         </article>
       )

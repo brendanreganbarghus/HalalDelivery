@@ -194,6 +194,8 @@ export async function ensureSchema() {
       promotion_type text not null default 'order_offer',
       buy_quantity integer,
       reward_quantity integer,
+      order_discount_type text,
+      order_discount_value integer,
       minimum_order_cents integer,
       starts_at timestamptz not null,
       ends_at timestamptz not null,
@@ -215,6 +217,8 @@ export async function ensureSchema() {
   await sql`alter table restaurant_promotion add column if not exists reward_scope_type text not null default 'same_as_qualifying'`
   await sql`alter table restaurant_promotion add column if not exists reward_category_ids uuid[] not null default '{}'`
   await sql`alter table restaurant_promotion add column if not exists reward_item_ids uuid[] not null default '{}'`
+  await sql`alter table restaurant_promotion add column if not exists order_discount_type text`
+  await sql`alter table restaurant_promotion add column if not exists order_discount_value integer`
   await sql`
     do $$
     begin
@@ -224,6 +228,32 @@ export async function ensureSchema() {
         alter table restaurant_promotion
         add constraint restaurant_promotion_reward_discount_percent_check
         check (reward_discount_percent is null or reward_discount_percent between 1 and 100);
+      end if;
+    end $$
+  `
+  await sql`
+    do $$
+    begin
+      if not exists (
+        select 1 from pg_constraint where conname = 'restaurant_promotion_order_discount_check'
+      ) then
+        alter table restaurant_promotion
+        add constraint restaurant_promotion_order_discount_check
+        check (
+          promotion_type <> 'order_value_discount'
+          or (
+            order_discount_type = 'percentage'
+            and order_discount_value between 1 and 100
+          )
+          or (
+            order_discount_type = 'fixed'
+            and order_discount_value between 1 and 100000
+          )
+          or (
+            order_discount_type = 'free_delivery'
+            and order_discount_value is null
+          )
+        );
       end if;
     end $$
   `
@@ -307,7 +337,13 @@ export async function ensureSchema() {
       customer_user_id uuid references app_user(id) on delete set null,
       restaurant_id uuid not null references restaurant(id),
       gross_cents integer not null,
+      food_subtotal_before_discount_cents integer not null,
       subtotal_cents integer not null,
+      promotion_discount_cents integer not null default 0,
+      delivery_discount_cents integer not null default 0,
+      applied_promotion_id uuid,
+      applied_promotion_title text,
+      applied_promotion_type text,
       delivery_fee_cents integer not null,
       service_fee_cents integer not null,
       restaurant_payable_cents integer not null,
@@ -337,10 +373,18 @@ export async function ensureSchema() {
   await sql`alter table customer_order add column if not exists confirmed_at timestamptz`
   await sql`alter table customer_order add column if not exists confirmation_email_status text not null default 'not_requested'`
   await sql`alter table customer_order add column if not exists confirmation_email_sent_at timestamptz`
+  await sql`alter table customer_order add column if not exists food_subtotal_before_discount_cents integer`
   await sql`alter table customer_order add column if not exists subtotal_cents integer`
+  await sql`alter table customer_order add column if not exists promotion_discount_cents integer not null default 0`
+  await sql`alter table customer_order add column if not exists delivery_discount_cents integer not null default 0`
+  await sql`alter table customer_order add column if not exists applied_promotion_id uuid`
+  await sql`alter table customer_order add column if not exists applied_promotion_title text`
+  await sql`alter table customer_order add column if not exists applied_promotion_type text`
   await sql`alter table customer_order add column if not exists delivery_fee_cents integer not null default 0`
   await sql`alter table customer_order add column if not exists service_fee_cents integer not null default 0`
   await sql`update customer_order set subtotal_cents = gross_cents - delivery_fee_cents - service_fee_cents where subtotal_cents is null`
+  await sql`update customer_order set food_subtotal_before_discount_cents = subtotal_cents where food_subtotal_before_discount_cents is null`
+  await sql`alter table customer_order alter column food_subtotal_before_discount_cents set not null`
   await sql`alter table customer_order alter column subtotal_cents set not null`
 
   await sql`

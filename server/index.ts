@@ -17,8 +17,7 @@ import {
   type ResolvedSelection,
 } from './modifiers.js'
 import {
-  calculateQuantityPromotionDiscount,
-  toQuantityPromotionRule,
+  selectBestAutomaticPromotion,
   type PromotionOrderLine,
 } from '../shared/promotionEngine.js'
 
@@ -98,10 +97,17 @@ const promotionRewardScopeSchema = z.object({
 const promotionSchema = z.object({
   title: z.string().trim().min(3).max(120),
   description: z.string().trim().min(10).max(500),
-  promotion_type: z.enum(['order_offer', 'quantity_discount']).default('order_offer'),
+  promotion_type: z.enum([
+    'announcement',
+    'order_offer',
+    'order_value_discount',
+    'quantity_discount',
+  ]).default('announcement'),
   buy_quantity: z.number().int().min(1).max(20).nullable().default(null),
   reward_quantity: z.number().int().min(1).max(20).nullable().default(null),
   reward_discount_percent: z.number().int().min(1).max(100).nullable().default(null),
+  order_discount_type: z.enum(['percentage', 'fixed', 'free_delivery']).nullable().default(null),
+  order_discount_value: z.number().int().min(1).max(100_000).nullable().default(null),
   qualifying_scope: promotionScopeSchema.default({ type: 'all', category_ids: [], item_ids: [] }),
   reward_scope: promotionRewardScopeSchema.default({ type: 'same_as_qualifying', category_ids: [], item_ids: [] }),
   minimum_order_cents: z.number().int().min(0).max(100_000).nullable(),
@@ -118,22 +124,72 @@ const promotionSchema = z.object({
   message: 'Buy quantity, reward quantity and reward discount are required for a quantity promotion.',
   path: ['buy_quantity'],
 }).refine((value) => (
-  value.qualifying_scope.type !== 'categories' || value.qualifying_scope.category_ids.length > 0
+  value.promotion_type !== 'quantity_discount' ||
+  (value.order_discount_type === null && value.order_discount_value === null)
+), {
+  message: 'Quantity offers cannot include an order-value discount.',
+  path: ['order_discount_type'],
+}).refine((value) => (
+  value.promotion_type !== 'order_value_discount' ||
+  (
+    value.buy_quantity === null &&
+    value.reward_quantity === null &&
+    value.reward_discount_percent === null &&
+    value.order_discount_type !== null
+  )
+), {
+  message: 'Choose one valid order-value discount rule.',
+  path: ['order_discount_type'],
+}).refine((value) => (
+  value.promotion_type !== 'order_value_discount' ||
+  (
+    (value.order_discount_type === 'percentage' &&
+      value.order_discount_value !== null &&
+      value.order_discount_value <= 100) ||
+    (value.order_discount_type === 'fixed' && value.order_discount_value !== null) ||
+    (value.order_discount_type === 'free_delivery' && value.order_discount_value === null)
+  )
+), {
+  message: 'Percentage must be 1-100, fixed discount must be positive, and free delivery has no value.',
+  path: ['order_discount_value'],
+}).refine((value) => (
+  !['announcement', 'order_offer'].includes(value.promotion_type) ||
+  (
+    value.buy_quantity === null &&
+    value.reward_quantity === null &&
+    value.reward_discount_percent === null &&
+    value.order_discount_type === null &&
+    value.order_discount_value === null &&
+    value.minimum_order_cents === null
+  )
+), {
+  message: 'Promotional announcements cannot include automatic discount rules or thresholds.',
+  path: ['promotion_type'],
+}).refine((value) => (
+  value.promotion_type !== 'quantity_discount' ||
+  value.qualifying_scope.type !== 'categories' ||
+  value.qualifying_scope.category_ids.length > 0
 ), {
   message: 'Choose at least one qualifying category.',
   path: ['qualifying_scope', 'category_ids'],
 }).refine((value) => (
-  value.qualifying_scope.type !== 'items' || value.qualifying_scope.item_ids.length > 0
+  value.promotion_type !== 'quantity_discount' ||
+  value.qualifying_scope.type !== 'items' ||
+  value.qualifying_scope.item_ids.length > 0
 ), {
   message: 'Choose at least one qualifying menu item.',
   path: ['qualifying_scope', 'item_ids'],
 }).refine((value) => (
-  value.reward_scope.type !== 'categories' || value.reward_scope.category_ids.length > 0
+  value.promotion_type !== 'quantity_discount' ||
+  value.reward_scope.type !== 'categories' ||
+  value.reward_scope.category_ids.length > 0
 ), {
   message: 'Choose at least one reward category.',
   path: ['reward_scope', 'category_ids'],
 }).refine((value) => (
-  value.reward_scope.type !== 'items' || value.reward_scope.item_ids.length > 0
+  value.promotion_type !== 'quantity_discount' ||
+  value.reward_scope.type !== 'items' ||
+  value.reward_scope.item_ids.length > 0
 ), {
   message: 'Choose at least one reward menu item.',
   path: ['reward_scope', 'item_ids'],
@@ -566,6 +622,7 @@ app.get('/api/discovery', async () => {
       select id, restaurant_id, title, description, promotion_type, buy_quantity, reward_quantity,
         reward_discount_percent, qualifying_scope_type, qualifying_category_ids, qualifying_item_ids,
         reward_scope_type, reward_category_ids, reward_item_ids,
+        order_discount_type, order_discount_value,
         minimum_order_cents, starts_at, ends_at, enabled,
         'active' as status
       from restaurant_promotion
@@ -676,6 +733,7 @@ app.get('/api/restaurants/:slug/storefront', async (request, reply) => {
       select id, title, description, promotion_type, buy_quantity, reward_quantity,
         reward_discount_percent, qualifying_scope_type, qualifying_category_ids, qualifying_item_ids,
         reward_scope_type, reward_category_ids, reward_item_ids,
+        order_discount_type, order_discount_value,
         minimum_order_cents, starts_at, ends_at, enabled,
         'active' as status
       from restaurant_promotion
@@ -684,7 +742,6 @@ app.get('/api/restaurants/:slug/storefront', async (request, reply) => {
         and starts_at <= now()
         and ends_at >= now()
       order by starts_at desc, id
-      limit 20
     `,
     sql`
       select id, name, summary, area, focus, image_url
@@ -771,6 +828,7 @@ app.get('/api/portal/me', async (request, reply) => {
       select id, title, description, promotion_type, buy_quantity, reward_quantity,
         reward_discount_percent, qualifying_scope_type, qualifying_category_ids, qualifying_item_ids,
         reward_scope_type, reward_category_ids, reward_item_ids,
+        order_discount_type, order_discount_value,
         minimum_order_cents, starts_at, ends_at, enabled,
         case
           when not enabled then 'disabled'
@@ -909,7 +967,7 @@ app.post('/api/portal/restaurants/:restaurantId/promotions', async (request, rep
       id, restaurant_id, title, description, promotion_type, buy_quantity, reward_quantity,
       reward_discount_percent, qualifying_scope_type, qualifying_category_ids, qualifying_item_ids,
       reward_scope_type, reward_category_ids, reward_item_ids,
-      minimum_order_cents,
+      order_discount_type, order_discount_value, minimum_order_cents,
       starts_at, ends_at, enabled, is_demo
     )
     values (
@@ -918,6 +976,7 @@ app.post('/api/portal/restaurants/:restaurantId/promotions', async (request, rep
       ${parsed.data.reward_discount_percent}, ${qualifyingScope.type},
       ${sql.array(qualifyingScope.category_ids)}::uuid[], ${sql.array(qualifyingScope.item_ids)}::uuid[],
       ${rewardScope.type}, ${sql.array(rewardScope.category_ids)}::uuid[], ${sql.array(rewardScope.item_ids)}::uuid[],
+      ${parsed.data.order_discount_type}, ${parsed.data.order_discount_value},
       ${parsed.data.minimum_order_cents}, ${parsed.data.starts_at}, ${parsed.data.ends_at},
       ${parsed.data.enabled}, ${process.env.NODE_ENV !== 'production'}
     )
@@ -1246,6 +1305,8 @@ app.get('/api/admin/reports/monthly', async (request, reply) => {
     sql`
       select count(*)::int as order_count,
         coalesce(sum(gross_cents), 0)::int as gross_cents,
+        coalesce(sum(promotion_discount_cents), 0)::int as promotion_discount_cents,
+        coalesce(sum(delivery_discount_cents), 0)::int as delivery_discount_cents,
         coalesce(sum(restaurant_payable_cents), 0)::int as restaurant_payable_cents,
         coalesce(sum(platform_fee_cents), 0)::int as platform_fee_cents,
         coalesce(sum(payment_fee_cents), 0)::int as payment_fee_cents,
@@ -1279,6 +1340,8 @@ app.get('/api/admin/reports/monthly', async (request, reply) => {
       select restaurant.id, restaurant.name,
         count(orders.id)::int as order_count,
         sum(orders.gross_cents)::int as gross_cents,
+        sum(orders.promotion_discount_cents)::int as promotion_discount_cents,
+        sum(orders.delivery_discount_cents)::int as delivery_discount_cents,
         sum(orders.restaurant_payable_cents)::int as payable_cents,
         sum(orders.platform_fee_cents)::int as platform_fee_cents,
         min(orders.commission_bps)::int as minimum_commission_bps,
@@ -1294,7 +1357,10 @@ app.get('/api/admin/reports/monthly', async (request, reply) => {
     `,
     sql`
       select orders.id, orders.order_number, orders.paid_at, restaurant.name as restaurant_name,
-        orders.gross_cents, orders.subtotal_cents, orders.delivery_fee_cents,
+        orders.gross_cents, orders.food_subtotal_before_discount_cents, orders.subtotal_cents,
+        orders.promotion_discount_cents, orders.delivery_discount_cents,
+        orders.applied_promotion_id, orders.applied_promotion_title, orders.applied_promotion_type,
+        orders.delivery_fee_cents,
         orders.service_fee_cents, orders.restaurant_payable_cents, orders.platform_fee_cents,
         orders.commission_bps, orders.payment_fee_cents, orders.donation_total_cents,
         coalesce(
@@ -1342,7 +1408,10 @@ app.get('/api/customer/orders', async (request, reply) => {
     select orders.id, orders.order_number, orders.status, orders.paid_at,
       orders.confirmed_at, orders.confirmation_email_status,
       orders.confirmation_email_sent_at, orders.gross_cents,
-      orders.subtotal_cents, orders.delivery_fee_cents, orders.service_fee_cents,
+      orders.food_subtotal_before_discount_cents, orders.subtotal_cents,
+      orders.promotion_discount_cents, orders.delivery_discount_cents,
+      orders.applied_promotion_id, orders.applied_promotion_title, orders.applied_promotion_type,
+      orders.delivery_fee_cents, orders.service_fee_cents,
       orders.donation_total_cents, orders.payment_method,
       restaurant.id as restaurant_id, restaurant.name as restaurant_name,
       restaurant.image_url as restaurant_image_url,
@@ -1536,17 +1605,17 @@ app.post('/api/poc/checkout', async (request, reply) => {
       where id = ${parsed.data.restaurant_id} and market_code = ${activeMarket}
     `,
     sql`
-      select promotion_type, buy_quantity, reward_quantity, reward_discount_percent,
+      select id, title, promotion_type, buy_quantity, reward_quantity, reward_discount_percent,
         qualifying_scope_type, qualifying_category_ids, qualifying_item_ids,
-        reward_scope_type, reward_category_ids, reward_item_ids
+        reward_scope_type, reward_category_ids, reward_item_ids,
+        order_discount_type, order_discount_value, minimum_order_cents
       from restaurant_promotion
       where restaurant_id = ${parsed.data.restaurant_id}
         and enabled = true
         and starts_at <= now()
         and ends_at >= now()
-        and promotion_type in ('quantity_discount', 'buy_x_get_y_free')
+        and promotion_type in ('quantity_discount', 'buy_x_get_y_free', 'order_value_discount')
       order by starts_at desc, id
-      limit 1
     `,
   ])
 
@@ -1608,24 +1677,27 @@ app.post('/api/poc/checkout', async (request, reply) => {
       minimum_order_cents: policy.minimum_order_cents,
     })
   }
-  const activePromotion = activePromotions[0]
-  const promotionRule = activePromotion ? toQuantityPromotionRule(activePromotion) : null
   const promotionLines: PromotionOrderLine[] = resolvedLines.map((line) => ({
     itemId: line.item_id,
     categoryId: line.category_id,
     unitPriceCents: line.unit_price_cents,
     quantity: line.quantity,
   }))
-  const promotionResult = promotionRule
-    ? calculateQuantityPromotionDiscount(promotionLines, promotionRule)
-    : null
-  const promotionDiscountCents = promotionResult?.discountCents ?? 0
-  const subtotalCents = menuSubtotalCents - promotionDiscountCents
-  const deliveryFeeCents =
+  const baseDeliveryFeeCents =
     policy.free_delivery_threshold_cents !== null &&
-    subtotalCents >= policy.free_delivery_threshold_cents
+    menuSubtotalCents >= policy.free_delivery_threshold_cents
       ? 0
       : policy.delivery_fee_cents
+  const appliedPromotion = selectBestAutomaticPromotion(
+    activePromotions,
+    promotionLines,
+    menuSubtotalCents,
+    baseDeliveryFeeCents,
+  )
+  const promotionDiscountCents = appliedPromotion?.foodDiscountCents ?? 0
+  const deliveryDiscountCents = appliedPromotion?.deliveryDiscountCents ?? 0
+  const subtotalCents = menuSubtotalCents - promotionDiscountCents
+  const deliveryFeeCents = baseDeliveryFeeCents - deliveryDiscountCents
   const serviceFeeCents = Math.min(
     Math.round(subtotalCents * policy.service_fee_bps / 10_000),
     policy.service_fee_cap_cents,
@@ -1640,6 +1712,17 @@ app.post('/api/poc/checkout', async (request, reply) => {
     selectedCharities.length === 0
       ? 0
       : Math.min(Math.round(subtotalCents * 0.025), platformFeeCents)
+  if (
+    promotionDiscountCents < 0 ||
+    promotionDiscountCents > menuSubtotalCents ||
+    deliveryDiscountCents < 0 ||
+    deliveryDiscountCents > baseDeliveryFeeCents ||
+    grossCents !== subtotalCents + deliveryFeeCents + serviceFeeCents ||
+    restaurantPayableCents + platformFeeCents !== grossCents ||
+    donationTotalCents > platformFeeCents
+  ) {
+    throw new Error('Checkout reconciliation invariant failed.')
+  }
   if (selectedCharities.length > donationTotalCents) {
     return reply.code(409).send({
       message: 'Select fewer charities for this contribution amount.',
@@ -1653,15 +1736,20 @@ app.post('/api/poc/checkout', async (request, reply) => {
   await sql.begin(async (transaction) => {
     await transaction`
       insert into customer_order (
-        id, order_number, customer_user_id, restaurant_id, gross_cents, subtotal_cents,
-        delivery_fee_cents, service_fee_cents, restaurant_payable_cents,
+        id, order_number, customer_user_id, restaurant_id, gross_cents,
+        food_subtotal_before_discount_cents, subtotal_cents, promotion_discount_cents,
+        delivery_discount_cents, applied_promotion_id, applied_promotion_title,
+        applied_promotion_type, delivery_fee_cents, service_fee_cents, restaurant_payable_cents,
         platform_fee_cents, payment_fee_cents, donation_total_cents, payment_method,
         commission_bps, market_code, status, paid_at, confirmed_at,
         confirmation_email_status, confirmation_email_sent_at, is_demo
       )
       values (
         ${orderId}, ${orderNumber}, ${customer?.id ?? null}, ${parsed.data.restaurant_id},
-        ${grossCents}, ${subtotalCents}, ${deliveryFeeCents}, ${serviceFeeCents},
+        ${grossCents}, ${menuSubtotalCents}, ${subtotalCents}, ${promotionDiscountCents},
+        ${deliveryDiscountCents}, ${appliedPromotion?.promotionId ?? null},
+        ${appliedPromotion?.title ?? null}, ${appliedPromotion?.promotionType ?? null},
+        ${deliveryFeeCents}, ${serviceFeeCents},
         ${restaurantPayableCents}, ${platformFeeCents}, ${paymentFeeCents},
         ${donationTotalCents}, ${parsed.data.payment_method}, ${commissionBps},
         ${activeMarket}, 'paid', now(), now(),
@@ -1705,6 +1793,17 @@ app.post('/api/poc/checkout', async (request, reply) => {
     gross_cents: grossCents,
     subtotal_cents: subtotalCents,
     promotion_discount_cents: promotionDiscountCents,
+    delivery_discount_cents: deliveryDiscountCents,
+    applied_promotion: appliedPromotion
+      ? {
+          id: appliedPromotion.promotionId,
+          title: appliedPromotion.title,
+          type: appliedPromotion.promotionType,
+          discount_cents: appliedPromotion.foodDiscountCents,
+          delivery_discount_cents: appliedPromotion.deliveryDiscountCents,
+          total_savings_cents: appliedPromotion.totalSavingsCents,
+        }
+      : null,
     delivery_fee_cents: deliveryFeeCents,
     service_fee_cents: serviceFeeCents,
     restaurant_payable_cents: restaurantPayableCents,

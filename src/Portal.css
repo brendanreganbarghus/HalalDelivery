@@ -311,7 +311,7 @@
 .report-note svg { width: 18px; flex: 0 0 auto; }
 .report-note p { margin: 0; font-size: 9px; }
 .report-note strong { margin-right: 6px; }
-.report-summary { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid #dfe6e0; border-radius: 10px; overflow: hidden; }
+.report-summary { display: grid; grid-template-columns: repeat(8, 1fr); border: 1px solid #dfe6e0; border-radius: 10px; overflow: hidden; }
 .report-summary > div { padding: 13px; border-right: 1px solid #e3e9e4; }
 .report-summary > div:last-child { border: 0; }
 .report-summary span, .report-summary strong { display: block; }

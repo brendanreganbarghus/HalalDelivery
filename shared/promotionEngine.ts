@@ -43,6 +43,28 @@ export type QuantityPromotionResult = {
   groupsApplied: number
 }
 
+export type OrderValueDiscountType = 'percentage' | 'fixed' | 'free_delivery'
+
+export type OrderValuePromotionRule = {
+  discountType: OrderValueDiscountType
+  discountValue: number | null
+  minimumOrderCents: number | null
+}
+
+export type AutomaticPromotionSource = PromotionRuleSource & {
+  id: string
+  title: string
+}
+
+export type AppliedPromotion = {
+  promotionId: string
+  title: string
+  promotionType: 'quantity_discount' | 'order_value_discount'
+  foodDiscountCents: number
+  deliveryDiscountCents: number
+  totalSavingsCents: number
+}
+
 const emptyResult: QuantityPromotionResult = {
   discountCents: 0,
   rewardUnitsApplied: 0,
@@ -164,6 +186,9 @@ export type PromotionRuleSource = {
   reward_scope_type?: string | null
   reward_category_ids?: string[] | null
   reward_item_ids?: string[] | null
+  order_discount_type?: string | null
+  order_discount_value?: number | null
+  minimum_order_cents?: number | null
 }
 
 const quantityPromotionTypes = new Set(['quantity_discount', 'buy_x_get_y_free'])
@@ -203,6 +228,115 @@ export function toQuantityPromotionRule(source: PromotionRuleSource): QuantityPr
   }
 }
 
+export function toOrderValuePromotionRule(source: PromotionRuleSource): OrderValuePromotionRule | null {
+  if (source.promotion_type !== 'order_value_discount') return null
+  const minimumOrderCents = source.minimum_order_cents ?? null
+  if (minimumOrderCents !== null && (!Number.isInteger(minimumOrderCents) || minimumOrderCents < 0)) {
+    return null
+  }
+  if (source.order_discount_type === 'percentage') {
+    const percent = source.order_discount_value
+    if (typeof percent !== 'number' || !Number.isInteger(percent) || percent < 1 || percent > 100) {
+      return null
+    }
+    return { discountType: 'percentage', discountValue: percent, minimumOrderCents }
+  }
+  if (source.order_discount_type === 'fixed') {
+    const fixedCents = source.order_discount_value
+    if (typeof fixedCents !== 'number' || !Number.isInteger(fixedCents) || fixedCents < 1) {
+      return null
+    }
+    return { discountType: 'fixed', discountValue: fixedCents, minimumOrderCents }
+  }
+  if (source.order_discount_type === 'free_delivery' && source.order_discount_value === null) {
+    return { discountType: 'free_delivery', discountValue: null, minimumOrderCents }
+  }
+  return null
+}
+
+export function calculateOrderValuePromotionSavings(
+  foodSubtotalCents: number,
+  deliveryFeeCents: number,
+  rule: OrderValuePromotionRule,
+): { foodDiscountCents: number; deliveryDiscountCents: number; totalSavingsCents: number } {
+  const subtotal = Math.max(0, Math.floor(foodSubtotalCents))
+  const deliveryFee = Math.max(0, Math.floor(deliveryFeeCents))
+  if (rule.minimumOrderCents !== null && subtotal < rule.minimumOrderCents) {
+    return { foodDiscountCents: 0, deliveryDiscountCents: 0, totalSavingsCents: 0 }
+  }
+
+  let foodDiscountCents = 0
+  let deliveryDiscountCents = 0
+  if (rule.discountType === 'percentage' && rule.discountValue !== null) {
+    foodDiscountCents = Math.min(subtotal, Math.round((subtotal * rule.discountValue) / 100))
+  } else if (rule.discountType === 'fixed' && rule.discountValue !== null) {
+    foodDiscountCents = Math.min(subtotal, rule.discountValue)
+  } else if (rule.discountType === 'free_delivery') {
+    deliveryDiscountCents = deliveryFee
+  }
+  return {
+    foodDiscountCents,
+    deliveryDiscountCents,
+    totalSavingsCents: foodDiscountCents + deliveryDiscountCents,
+  }
+}
+
+export function selectBestAutomaticPromotion(
+  promotions: AutomaticPromotionSource[],
+  lines: PromotionOrderLine[],
+  foodSubtotalCents: number,
+  deliveryFeeCents: number,
+): AppliedPromotion | null {
+  const candidates = promotions.flatMap((promotion): AppliedPromotion[] => {
+    const quantityRule = toQuantityPromotionRule(promotion)
+    if (quantityRule) {
+      if (
+        promotion.minimum_order_cents !== null &&
+        promotion.minimum_order_cents !== undefined &&
+        foodSubtotalCents < promotion.minimum_order_cents
+      ) {
+        return []
+      }
+      const foodDiscountCents = Math.min(
+        Math.max(0, Math.floor(foodSubtotalCents)),
+        calculateQuantityPromotionDiscount(lines, quantityRule).discountCents,
+      )
+      return foodDiscountCents > 0
+        ? [{
+            promotionId: promotion.id,
+            title: promotion.title,
+            promotionType: 'quantity_discount',
+            foodDiscountCents,
+            deliveryDiscountCents: 0,
+            totalSavingsCents: foodDiscountCents,
+          }]
+        : []
+    }
+
+    const orderValueRule = toOrderValuePromotionRule(promotion)
+    if (!orderValueRule) return []
+    const savings = calculateOrderValuePromotionSavings(
+      foodSubtotalCents,
+      deliveryFeeCents,
+      orderValueRule,
+    )
+    return savings.totalSavingsCents > 0
+      ? [{
+          promotionId: promotion.id,
+          title: promotion.title,
+          promotionType: 'order_value_discount',
+          ...savings,
+        }]
+      : []
+  })
+
+  return candidates.sort(
+    (left, right) =>
+      right.totalSavingsCents - left.totalSavingsCents ||
+      left.promotionId.localeCompare(right.promotionId),
+  )[0] ?? null
+}
+
 /** Name lookups used to render human copy for a scope ("all menu items", "Pizzas, Sides", ...). */
 export type PromotionNameLookup = {
   categoryNameById: Record<string, string>
@@ -235,4 +369,17 @@ export function describeQuantityPromotion(rule: QuantityPromotionRule, lookup: P
   const scopeSuffix = qualifyingLabel === 'all menu items' && sameScope ? '' : ` from ${qualifyingLabel}`
   const rewardSuffix = sameScope ? '' : ` from ${rewardLabel}`
   return `Buy ${rule.buyQuantity}${scopeSuffix}, get ${rewardCountLabel}${rewardSuffix} ${discountLabel}`
+}
+
+export function describeOrderValuePromotion(rule: OrderValuePromotionRule): string {
+  const threshold = rule.minimumOrderCents === null
+    ? ''
+    : ` on food orders of €${(rule.minimumOrderCents / 100).toFixed(2)} or more`
+  if (rule.discountType === 'percentage') {
+    return `${rule.discountValue}% off the food subtotal${threshold}`
+  }
+  if (rule.discountType === 'fixed') {
+    return `€${((rule.discountValue ?? 0) / 100).toFixed(2)} off the food subtotal${threshold}`
+  }
+  return `Free delivery${threshold}`
 }

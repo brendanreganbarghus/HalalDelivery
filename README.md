@@ -114,14 +114,22 @@ allergen declarations — a warning to that effect is shown in the modal.
 
 ## Generic promotions
 
-Restaurant owners manage two promotion types from `/restaurant-portal`:
+Restaurant owners manage three promotion types from `/restaurant-portal`:
 
-- **Order promotions** — a manual campaign message shown on the storefront with no automatic
-  discount applied at checkout.
-- **Quantity promotions** (e.g. "buy 1 get 1 free", "buy X get the cheapest Y free", "second at
+- **Promotional announcements** — scheduled storefront messages with no financial effect.
+- **Order-value offers** — percentage off the food subtotal, a fixed euro discount capped at the
+  food subtotal, or free delivery, with an optional pre-discount minimum food order.
+- **Quantity offers** (e.g. "buy 1 get 1 free", "buy X get the cheapest Y free", "second at
   half price") — configurable qualifying and reward scopes (whole order, a category, or specific
-  items) with an automatic discount calculated at checkout. Only one active quantity promotion
-  applies per restaurant at a time.
+  items).
+
+Automatic offers do not stack. The shared promotion engine evaluates every eligible active
+quantity and order-value offer, then applies the single offer with the greatest customer savings
+(including delivery savings). Ties are resolved by promotion ID for deterministic client/server
+results. The basket is a preview only: checkout recalculates the winning offer from current menu
+prices and configuration on the server, uses the discounted amount for the simulated payment, and
+snapshots the applied promotion and savings on the order for customer history and finance reports.
+Legacy `order_offer` rows remain compatible and are treated as message-only announcements.
 
 The restaurant portal includes an in-app **"How offers work"** help panel (promotion help panel)
 that explains the available promotion types, scopes, and presets with worked examples, and a

@@ -35,11 +35,9 @@ import {
   type ModifierConfig,
 } from './modifiers.ts'
 import {
-  calculateQuantityPromotionDiscount,
-  describeQuantityPromotion,
-  isQuantityPromotionType,
-  toQuantityPromotionRule,
-  type PromotionNameLookup,
+  selectBestAutomaticPromotion,
+  type AppliedPromotion,
+  type OrderValueDiscountType,
   type PromotionOrderLine,
   type PromotionQualifyingScopeType,
   type PromotionRewardScopeType,
@@ -73,7 +71,12 @@ export type Offer = {
   id: string
   title: string
   description: string
-  promotion_type: 'order_offer' | 'quantity_discount' | 'buy_x_get_y_free'
+  promotion_type:
+    | 'announcement'
+    | 'order_offer'
+    | 'order_value_discount'
+    | 'quantity_discount'
+    | 'buy_x_get_y_free'
   buy_quantity: number | null
   reward_quantity: number | null
   reward_discount_percent: number | null
@@ -83,6 +86,8 @@ export type Offer = {
   reward_scope_type: PromotionRewardScopeType | null
   reward_category_ids: string[] | null
   reward_item_ids: string[] | null
+  order_discount_type: OrderValueDiscountType | null
+  order_discount_value: number | null
   minimum_order_cents: number | null
   starts_at: string
   ends_at: string
@@ -1001,6 +1006,15 @@ type CheckoutResult = {
   gross_cents: number
   subtotal_cents: number
   promotion_discount_cents: number
+  delivery_discount_cents: number
+  applied_promotion: {
+    id: string
+    title: string
+    type: AppliedPromotion['promotionType']
+    discount_cents: number
+    delivery_discount_cents: number
+    total_savings_cents: number
+  } | null
   delivery_fee_cents: number
   service_fee_cents: number
   restaurant_payable_cents: number
@@ -1050,10 +1064,6 @@ export function CheckoutDrawer({
   const menuSubtotalCents =
     simpleLines.reduce((total, line) => total + line.item.price_cents * line.quantity, 0) +
     priceLines.reduce((total, line) => total + line.unitPriceCents * line.quantity, 0)
-  const activePromotion = restaurant?.offers?.find(
-    (offer) => offer.status === 'active' && isQuantityPromotionType(offer.promotion_type),
-  )
-  const promotionRule = activePromotion ? toQuantityPromotionRule(activePromotion) : null
   const promotionLines: PromotionOrderLine[] = [
     ...simpleLines.map((line) => ({
       itemId: line.item.id,
@@ -1068,23 +1078,22 @@ export function CheckoutDrawer({
       quantity: line.quantity,
     })),
   ]
-  const promotionResult = promotionRule
-    ? calculateQuantityPromotionDiscount(promotionLines, promotionRule)
-    : null
-  const promotionDiscountCents = promotionResult?.discountCents ?? 0
-  const promotionNameLookup: PromotionNameLookup = useMemo(() => ({
-    categoryNameById: Object.fromEntries((restaurant?.menu ?? []).map((category) => [category.id, category.name])),
-    itemNameById: Object.fromEntries(
-      (restaurant?.menu ?? []).flatMap((category) => category.items).map((item) => [item.id, item.name]),
-    ),
-  }), [restaurant])
-  const subtotalCents = menuSubtotalCents - promotionDiscountCents
-  const deliveryFeeCents =
+  const baseDeliveryFeeCents =
     restaurant?.free_delivery_threshold_cents !== null &&
     restaurant?.free_delivery_threshold_cents !== undefined &&
-    subtotalCents >= restaurant.free_delivery_threshold_cents
+    menuSubtotalCents >= restaurant.free_delivery_threshold_cents
       ? 0
       : (restaurant?.delivery_fee_cents ?? 0)
+  const appliedPromotion = selectBestAutomaticPromotion(
+    restaurant?.offers?.filter((offer) => offer.status === 'active') ?? [],
+    promotionLines,
+    menuSubtotalCents,
+    baseDeliveryFeeCents,
+  )
+  const promotionDiscountCents = appliedPromotion?.foodDiscountCents ?? 0
+  const deliveryDiscountCents = appliedPromotion?.deliveryDiscountCents ?? 0
+  const subtotalCents = menuSubtotalCents - promotionDiscountCents
+  const deliveryFeeCents = baseDeliveryFeeCents - deliveryDiscountCents
   const serviceFeeCents = restaurant
     ? Math.min(
         Math.round(subtotalCents * restaurant.service_fee_bps / 10_000),
@@ -1194,6 +1203,12 @@ export function CheckoutDrawer({
                 <span>{copy.checkout.receipt.platformCommission}</span>
                 <strong>{formatMoney(language, receipt.platform_fee_cents / 100)}</strong>
               </p>
+              {receipt.applied_promotion && (
+                <p className="receipt__donation">
+                  <span>{receipt.applied_promotion.title}</span>
+                  <strong>− {formatMoney(language, receipt.applied_promotion.total_savings_cents / 100)}</strong>
+                </p>
+              )}
               {receipt.donation_total_cents > 0 && (
                 <p className="receipt__donation">
                   <span>{copy.checkout.receipt.charityDonation}</span>
@@ -1268,20 +1283,31 @@ export function CheckoutDrawer({
                     <span>Subtotal</span>
                     <strong>{formatMoney(language, menuSubtotalCents / 100)}</strong>
                   </div>
-                  {promotionDiscountCents > 0 && (
+                  {appliedPromotion && promotionDiscountCents > 0 && (
                     <div className="checkout-fee-line checkout-promotion">
                       <span>
-                        {language === 'nl' ? 'Promotiekorting' : 'Promotion discount'}
-                        {promotionRule && (
-                          <small className="checkout-promotion__detail">
-                            {describeQuantityPromotion(promotionRule, promotionNameLookup)}
-                          </small>
-                        )}
+                        {appliedPromotion.title}
+                        <small className="checkout-promotion__detail">
+                          {language === 'nl' ? 'Beste automatische aanbieding toegepast' : 'Best automatic offer applied'}
+                        </small>
                       </span>
                       <strong>− {formatMoney(language, promotionDiscountCents / 100)}</strong>
                     </div>
                   )}
-                  <div className="checkout-fee-line"><span>{language === 'nl' ? 'Bezorgkosten' : 'Delivery fee'}</span><strong>{formatMoney(language, deliveryFeeCents / 100)}</strong></div>
+                  <div className="checkout-fee-line">
+                    <span>
+                      {language === 'nl' ? 'Bezorgkosten' : 'Delivery fee'}
+                      {deliveryDiscountCents > 0 && (
+                        <small className="checkout-promotion__detail">
+                          {language === 'nl' ? 'Gratis bezorging via aanbieding' : 'Free delivery offer'}
+                        </small>
+                      )}
+                    </span>
+                    <strong>
+                      {deliveryDiscountCents > 0 && <s>{formatMoney(language, baseDeliveryFeeCents / 100)}</s>}
+                      {' '}{formatMoney(language, deliveryFeeCents / 100)}
+                    </strong>
+                  </div>
                   <div className="checkout-fee-line"><span>{language === 'nl' ? 'Servicekosten' : 'Service fee'}</span><strong>{formatMoney(language, serviceFeeCents / 100)}</strong></div>
                   <div className="checkout-total"><span>{copy.checkout.order.total}</span><strong>{formatMoney(language, totalCents / 100)}</strong></div>
                   {restaurant && menuSubtotalCents < restaurant.minimum_order_cents && <p className="checkout-error">{language === 'nl' ? `Minimale bestelling: ${formatMoney(language, restaurant.minimum_order_cents / 100)}.` : `Minimum food order: ${formatMoney(language, restaurant.minimum_order_cents / 100)}.`}</p>}
@@ -1437,6 +1463,13 @@ type CustomerOrder = {
   confirmation_email_status: 'not_requested' | 'pending' | 'sent' | 'simulated' | 'failed'
   confirmation_email_sent_at: string | null
   gross_cents: number
+  food_subtotal_before_discount_cents: number
+  subtotal_cents: number
+  promotion_discount_cents: number
+  delivery_discount_cents: number
+  applied_promotion_id: string | null
+  applied_promotion_title: string | null
+  applied_promotion_type: AppliedPromotion['promotionType'] | null
   donation_total_cents: number
   payment_method: string
   restaurant_id: string
@@ -1620,6 +1653,17 @@ export function AccountPage() {
                     <strong>{formatMoney(language, item.unit_price_cents * item.quantity / 100)}</strong>
                   </p>
                 ))}
+                {order.applied_promotion_title && (
+                  <p>
+                    <span>{order.applied_promotion_title}</span>
+                    <strong>
+                      − {formatMoney(
+                        language,
+                        (order.promotion_discount_cents + order.delivery_discount_cents) / 100,
+                      )}
+                    </strong>
+                  </p>
+                )}
                 <p className="order-details__total"><span>{copy.account.total}</span><strong>{formatMoney(language, order.gross_cents / 100)}</strong></p>
                 {order.donation_total_cents > 0 && <p><span>{copy.account.donation}</span><strong>{formatMoney(language, order.donation_total_cents / 100)}</strong></p>}
                 <small className={`email-status email-status--${order.confirmation_email_status}`}>

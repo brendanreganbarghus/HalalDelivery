@@ -94,7 +94,7 @@ export async function resetPocData() {
           id, restaurant_id, title, description, promotion_type, buy_quantity, reward_quantity,
           reward_discount_percent, qualifying_scope_type, qualifying_category_ids, qualifying_item_ids,
           reward_scope_type, reward_category_ids, reward_item_ids,
-          minimum_order_cents,
+          order_discount_type, order_discount_value, minimum_order_cents,
           starts_at, ends_at, enabled, is_demo
         )
         values (
@@ -105,7 +105,7 @@ export async function resetPocData() {
           ${transaction.array([...promotion.qualifyingItemIds])}::uuid[],
           ${promotion.rewardScopeType}, ${transaction.array([...promotion.rewardCategoryIds])}::uuid[],
           ${transaction.array([...promotion.rewardItemIds])}::uuid[],
-          ${promotion.minimumOrderCents},
+          ${promotion.orderDiscountType}, ${promotion.orderDiscountValue}, ${promotion.minimumOrderCents},
           ${promotion.startsAt}, ${promotion.endsAt}, ${promotion.enabled}, true
         )
       `
@@ -202,7 +202,8 @@ export async function resetPocData() {
     for (const order of orders) {
       await transaction`
         insert into customer_order (
-          id, order_number, customer_user_id, restaurant_id, gross_cents, subtotal_cents,
+          id, order_number, customer_user_id, restaurant_id, gross_cents,
+          food_subtotal_before_discount_cents, subtotal_cents,
           delivery_fee_cents, service_fee_cents, restaurant_payable_cents,
           platform_fee_cents, commission_bps, payment_fee_cents, donation_total_cents,
           market_code, status, paid_at, confirmed_at, confirmation_email_status,
@@ -213,7 +214,7 @@ export async function resetPocData() {
           ${order[0] === orders[0][0] || order[0] === orders[3][0]
             ? '80000000-0000-4000-8000-000000000003'
             : null},
-          ${order[2]}, ${order[3]}, ${order[3]}, 0, 0, ${order[4]},
+          ${order[2]}, ${order[3]}, ${order[3]}, ${order[3]}, 0, 0, ${order[4]},
           ${order[5]}, ${order[6]}, ${order[7]}, ${order[8]}, 'NL', 'paid',
           ${order[9]}, ${order[9]}, 'simulated', ${order[9]}, true
         )

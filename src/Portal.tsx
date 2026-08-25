@@ -38,8 +38,11 @@ import {
   type ModifierConfig,
 } from './modifiers.ts'
 import {
+  describeOrderValuePromotion,
   describeQuantityPromotion,
+  toOrderValuePromotionRule,
   toQuantityPromotionRule,
+  type OrderValueDiscountType,
   type PromotionNameLookup,
   type PromotionQualifyingScopeType,
   type PromotionRewardScopeType,
@@ -172,7 +175,12 @@ type RestaurantPortalData = {
     id: string
     title: string
     description: string
-    promotion_type: 'order_offer' | 'quantity_discount' | 'buy_x_get_y_free'
+    promotion_type:
+      | 'announcement'
+      | 'order_offer'
+      | 'order_value_discount'
+      | 'quantity_discount'
+      | 'buy_x_get_y_free'
     buy_quantity: number | null
     reward_quantity: number | null
     reward_discount_percent: number | null
@@ -182,6 +190,8 @@ type RestaurantPortalData = {
     reward_scope_type: PromotionRewardScopeType | null
     reward_category_ids: string[] | null
     reward_item_ids: string[] | null
+    order_discount_type: OrderValueDiscountType | null
+    order_discount_value: number | null
     minimum_order_cents: number | null
     starts_at: string
     ends_at: string
@@ -215,6 +225,8 @@ type MonthlyReportData = {
   summary: {
     order_count: number
     gross_cents: number
+    promotion_discount_cents: number
+    delivery_discount_cents: number
     restaurant_payable_cents: number
     platform_fee_cents: number
     payment_fee_cents: number
@@ -235,6 +247,8 @@ type MonthlyReportData = {
     name: string
     order_count: number
     gross_cents: number
+    promotion_discount_cents: number
+    delivery_discount_cents: number
     payable_cents: number
     platform_fee_cents: number
     minimum_commission_bps: number
@@ -246,6 +260,10 @@ type MonthlyReportData = {
     paid_at: string
     restaurant_name: string
     gross_cents: number
+    promotion_discount_cents: number
+    delivery_discount_cents: number
+    applied_promotion_title: string | null
+    applied_promotion_type: string | null
     restaurant_payable_cents: number
     platform_fee_cents: number
     commission_bps: number
@@ -870,7 +888,9 @@ function PromotionsManager({ data, onChanged }: { data: RestaurantPortalData; on
   const [form, setForm] = useState({
     title: '',
     description: '',
-    promotion_type: 'order_offer' as 'order_offer' | 'quantity_discount',
+    promotion_type: 'announcement' as 'announcement' | 'order_value_discount' | 'quantity_discount',
+    order_discount_type: 'percentage' as OrderValueDiscountType,
+    order_discount_value: '15',
     preset: 'buy_1_get_1' as PromotionPresetKey,
     buy_quantity: '1',
     reward_quantity: '1',
@@ -921,10 +941,22 @@ function PromotionsManager({ data, onChanged }: { data: RestaurantPortalData; on
         reward_item_ids: rewardScope.item_ids,
       })
     : null
-
-  const existingActiveQuantityPromotion = data.promotions.find(
-    (offer) => offer.status === 'active' && (offer.promotion_type === 'quantity_discount' || offer.promotion_type === 'buy_x_get_y_free'),
-  )
+  const previewOrderValueRule = form.promotion_type === 'order_value_discount'
+    ? toOrderValuePromotionRule({
+        promotion_type: form.promotion_type,
+        buy_quantity: null,
+        reward_quantity: null,
+        order_discount_type: form.order_discount_type,
+        order_discount_value: form.order_discount_type === 'free_delivery'
+          ? null
+          : form.order_discount_type === 'fixed'
+            ? Math.round(Number(form.order_discount_value) * 100)
+            : Number(form.order_discount_value),
+        minimum_order_cents: form.minimum_order
+          ? Math.round(Number(form.minimum_order) * 100)
+          : null,
+      })
+    : null
 
   const create = useMutation({
     mutationFn: () => api(`/api/portal/restaurants/${data.restaurant.id}/promotions`, {
@@ -936,13 +968,23 @@ function PromotionsManager({ data, onChanged }: { data: RestaurantPortalData; on
         buy_quantity: form.promotion_type === 'quantity_discount' ? Number(form.buy_quantity) : null,
         reward_quantity: form.promotion_type === 'quantity_discount' ? Number(form.reward_quantity) : null,
         reward_discount_percent: form.promotion_type === 'quantity_discount' ? Number(form.reward_discount_percent) : null,
+        order_discount_type: form.promotion_type === 'order_value_discount'
+          ? form.order_discount_type
+          : null,
+        order_discount_value: form.promotion_type === 'order_value_discount'
+          ? form.order_discount_type === 'free_delivery'
+            ? null
+            : form.order_discount_type === 'fixed'
+              ? Math.round(Number(form.order_discount_value) * 100)
+              : Number(form.order_discount_value)
+          : null,
         qualifying_scope: form.promotion_type === 'quantity_discount'
           ? qualifyingScope
           : { type: 'all', category_ids: [], item_ids: [] },
         reward_scope: form.promotion_type === 'quantity_discount'
           ? rewardScope
           : { type: 'same_as_qualifying', category_ids: [], item_ids: [] },
-        minimum_order_cents: form.minimum_order
+        minimum_order_cents: form.promotion_type !== 'announcement' && form.minimum_order
           ? Math.round(Number(form.minimum_order) * 100)
           : null,
         starts_at: new Date(form.starts_at).toISOString(),
@@ -975,17 +1017,22 @@ function PromotionsManager({ data, onChanged }: { data: RestaurantPortalData; on
         <section className="panel promotion-help" id="promotion-help">
           <header><CircleHelp /><div><h2>Create an automatic offer</h2><p>Follow these steps from left to right. The preview confirms the rule before you publish it.</p></div></header>
           <ol>
-            <li><strong>Choose a promotion type</strong><span>Use “Quantity offer” when checkout must calculate a discount. “Order promotion” only displays your campaign message.</span></li>
-            <li><strong>Pick a template</strong><span>Start with buy-one-get-one, cheapest free, second item half price or a custom quantity offer.</span></li>
+            <li><strong>Choose a promotion type</strong><span>Announcements show a scheduled message only. Order-value and quantity offers calculate one automatic checkout discount.</span></li>
+            <li><strong>Configure an order-value offer</strong><span>Choose percentage, fixed euros or free delivery. Enter the value where shown and optionally set the minimum pre-discount food subtotal.</span></li>
+            <li><strong>Configure a quantity offer</strong><span>Start with buy-one-get-one, cheapest free, second item half price or a custom quantity offer.</span></li>
             <li><strong>Enter the quantities</strong><span>“Buy quantity” unlocks the offer. “Reward quantity” controls how many items receive the discount. Enter 100% for free or 50% for half price.</span></li>
             <li><strong>Select qualifying items</strong><span>Choose all items, particular categories or individual menu items that count toward the required purchase.</span></li>
             <li><strong>Select reward items</strong><span>Choose what may receive the discount. “Same items customer bought” is ideal for buy-one-get-one offers.</span></li>
-            <li><strong>Add customer-facing details</strong><span>Enter a clear title, description, optional minimum order and the campaign start/end dates, then create the offer.</span></li>
+            <li><strong>Add customer-facing details</strong><span>Enter a clear title, description and campaign dates, then publish. Checkout tests all active automatic offers and applies only the one with the greatest savings.</span></li>
           </ol>
           <div className="promotion-help__examples">
             <article><strong>Pizza BOGO</strong><span>Buy 1 · Reward 1 · 100% · Pizza categories for both scopes.</span></article>
             <article><strong>Second burger half price</strong><span>Buy 1 · Reward 1 · 50% · Burger category · Same items bought.</span></article>
             <article><strong>Buy 2 mains, get a drink free</strong><span>Buy 2 · Reward 1 · 100% · Main category qualifies · Drinks category rewarded.</span></article>
+            <article><strong>15% off over €25</strong><span>Order-value · Percentage · 15 · Minimum order €25.</span></article>
+            <article><strong>€5 off over €30</strong><span>Order-value · Fixed euro discount · €5 · Minimum order €30.</span></article>
+            <article><strong>Free delivery over €20</strong><span>Order-value · Free delivery · Minimum order €20.</span></article>
+            <article><strong>Weekend announcement</strong><span>Announcement · Add title, message and schedule · Totals never change.</span></article>
           </div>
         </section>
       )}
@@ -995,12 +1042,56 @@ function PromotionsManager({ data, onChanged }: { data: RestaurantPortalData; on
           <label>Promotion type *
             <select
               value={form.promotion_type}
-              onChange={(event) => setForm({ ...form, promotion_type: event.target.value as 'order_offer' | 'quantity_discount' })}
+              onChange={(event) => setForm({
+                ...form,
+                promotion_type: event.target.value as typeof form.promotion_type,
+              })}
             >
-              <option value="order_offer">Order promotion (manual copy, no automatic discount)</option>
-              <option value="quantity_discount">Quantity offer (automatic checkout discount)</option>
+              <option value="announcement">Promotional announcement (message only)</option>
+              <option value="order_value_discount">Order-value offer (automatic discount)</option>
+              <option value="quantity_discount">Quantity offer (automatic item discount)</option>
             </select>
           </label>
+
+          {form.promotion_type === 'announcement' && (
+            <p className="promotion-preview">
+              <Gift /> Storefront message only. This announcement never changes basket or checkout totals.
+            </p>
+          )}
+
+          {form.promotion_type === 'order_value_discount' && (
+            <>
+              <label>Order-value rule *
+                <select
+                  value={form.order_discount_type}
+                  onChange={(event) => setForm({
+                    ...form,
+                    order_discount_type: event.target.value as OrderValueDiscountType,
+                    order_discount_value: event.target.value === 'percentage' ? '15' : '5',
+                  })}
+                >
+                  <option value="percentage">Percentage off food subtotal</option>
+                  <option value="fixed">Fixed euro discount</option>
+                  <option value="free_delivery">Free delivery</option>
+                </select>
+              </label>
+              {form.order_discount_type === 'percentage' && (
+                <label>Discount percentage *
+                  <input required type="number" min="1" max="100" step="1" value={form.order_discount_value} onChange={(event) => setForm({ ...form, order_discount_value: event.target.value })} />
+                </label>
+              )}
+              {form.order_discount_type === 'fixed' && (
+                <label>Fixed discount (€) *
+                  <input required type="number" min=".01" max="1000" step=".01" value={form.order_discount_value} onChange={(event) => setForm({ ...form, order_discount_value: event.target.value })} />
+                </label>
+              )}
+              {previewOrderValueRule && (
+                <p className="promotion-preview">
+                  <Gift /> {describeOrderValuePromotion(previewOrderValueRule)}
+                </p>
+              )}
+            </>
+          )}
 
           {form.promotion_type === 'quantity_discount' && (
             <>
@@ -1051,19 +1142,14 @@ function PromotionsManager({ data, onChanged }: { data: RestaurantPortalData; on
                   <Gift /> {describeQuantityPromotion(previewRule, nameLookup)}
                 </p>
               )}
-              {existingActiveQuantityPromotion && (
-                <p className="promotion-warning">
-                  <CircleAlert /> Only one quantity offer applies at checkout at a time. Publishing this will
-                  replace “{existingActiveQuantityPromotion.title}” as the active quantity offer, ordered by
-                  start time.
-                </p>
-              )}
             </>
           )}
 
           <label>Offer title *<input required minLength={3} maxLength={120} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Buy 1, get 1 free" /></label>
           <label>Description *<textarea required minLength={10} maxLength={500} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-          <label>Minimum order (€)<input type="number" min="0" step=".01" value={form.minimum_order} onChange={(event) => setForm({ ...form, minimum_order: event.target.value })} placeholder="Optional" /></label>
+          {form.promotion_type !== 'announcement' && (
+            <label>Minimum pre-discount food order (€)<input type="number" min="0" max="1000" step=".01" value={form.minimum_order} onChange={(event) => setForm({ ...form, minimum_order: event.target.value })} placeholder="Optional" /></label>
+          )}
           <div className="field-grid">
             <label>Starts *<input required type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
             <label>Ends *<input required type="datetime-local" min={form.starts_at} value={form.ends_at} onChange={(event) => setForm({ ...form, ends_at: event.target.value })} /></label>
@@ -1073,14 +1159,17 @@ function PromotionsManager({ data, onChanged }: { data: RestaurantPortalData; on
           <button className="portal-primary" disabled={create.isPending} type="submit"><Gift /> Publish offer</button>
         </form>
         <aside className="panel offers-list">
-          <div className="panel-heading"><div><h2>Campaign calendar</h2><p>Active, upcoming and expired offers · only the most recently started quantity offer applies at checkout</p></div></div>
+          <div className="panel-heading"><div><h2>Campaign calendar</h2><p>Announcements are message-only · checkout applies the eligible automatic offer with the greatest savings</p></div></div>
           {data.promotions.map((offer) => {
-            const rule = toQuantityPromotionRule(offer)
+            const quantityRule = toQuantityPromotionRule(offer)
+            const orderValueRule = toOrderValuePromotionRule(offer)
             return (
               <article key={offer.id}>
                 <div>
                   <Status value={offer.status} /><h3>{offer.title}</h3><p>{offer.description}</p>
-                  {rule && <p className="promotion-preview promotion-preview--compact"><Gift /> {describeQuantityPromotion(rule, nameLookup)}</p>}
+                  {quantityRule && <p className="promotion-preview promotion-preview--compact"><Gift /> {describeQuantityPromotion(quantityRule, nameLookup)}</p>}
+                  {orderValueRule && <p className="promotion-preview promotion-preview--compact"><Gift /> {describeOrderValuePromotion(orderValueRule)}</p>}
+                  {!quantityRule && !orderValueRule && <p className="promotion-preview promotion-preview--compact"><Gift /> Promotional announcement · message only</p>}
                   <small>{new Date(offer.starts_at).toLocaleString()} – {new Date(offer.ends_at).toLocaleString()}</small>
                 </div>
                 <button type="button" disabled={toggle.isPending} onClick={() => toggle.mutate(offer)}>{offer.enabled ? 'Disable' : 'Enable'}</button>
@@ -1354,6 +1443,7 @@ function MonthlyReport() {
           <div className="report-summary">
             <div><span>Paid orders</span><strong>{data.summary.order_count}</strong></div>
             <div><span>Gross sales received</span><strong>{money.format(data.summary.gross_cents / 100)}</strong></div>
+            <div><span>Promotion savings</span><strong>{money.format((data.summary.promotion_discount_cents + data.summary.delivery_discount_cents) / 100)}</strong></div>
             <div><span>Owed to restaurants</span><strong>{money.format(data.summary.restaurant_payable_cents / 100)}</strong></div>
             <div><span>Charity payable</span><strong>{money.format(data.summary.donation_total_cents / 100)}</strong></div>
             <div><span>Contracted commission</span><strong>{money.format(data.summary.platform_fee_cents / 100)}</strong></div>
@@ -1378,8 +1468,8 @@ function MonthlyReport() {
 
           <ReportTable title="Order audit trail" subtitle="Every charity split remains traceable to its originating paid order">
             <table className="order-ledger">
-              <thead><tr><th>Date / order</th><th>Restaurant</th><th>Gross</th><th>Rate</th><th>Restaurant owed</th><th>Commission</th><th>Donation allocation</th></tr></thead>
-              <tbody>{data.orders.map((order) => <tr key={order.id}><td>{new Date(order.paid_at).toLocaleDateString('en-GB')}<small>{order.order_number}</small></td><td>{order.restaurant_name}</td><td>{money.format(order.gross_cents / 100)}</td><td>{order.commission_bps / 100}%</td><td>{money.format(order.restaurant_payable_cents / 100)}</td><td>{money.format(order.platform_fee_cents / 100)}</td><td>{order.donations.length ? order.donations.map((donation) => <small key={donation.charity_name}>{donation.charity_name}: {money.format(donation.amount_cents / 100)}</small>) : <small>No donation selected</small>}</td></tr>)}</tbody>
+              <thead><tr><th>Date / order</th><th>Restaurant</th><th>Promotion</th><th>Gross</th><th>Rate</th><th>Restaurant owed</th><th>Commission</th><th>Donation allocation</th></tr></thead>
+              <tbody>{data.orders.map((order) => <tr key={order.id}><td>{new Date(order.paid_at).toLocaleDateString('en-GB')}<small>{order.order_number}</small></td><td>{order.restaurant_name}</td><td>{order.applied_promotion_title ? <><strong>{order.applied_promotion_title}</strong><small>− {money.format((order.promotion_discount_cents + order.delivery_discount_cents) / 100)}</small></> : <small>None</small>}</td><td>{money.format(order.gross_cents / 100)}</td><td>{order.commission_bps / 100}%</td><td>{money.format(order.restaurant_payable_cents / 100)}</td><td>{money.format(order.platform_fee_cents / 100)}</td><td>{order.donations.length ? order.donations.map((donation) => <small key={donation.charity_name}>{donation.charity_name}: {money.format(donation.amount_cents / 100)}</small>) : <small>No donation selected</small>}</td></tr>)}</tbody>
             </table>
           </ReportTable>
 
