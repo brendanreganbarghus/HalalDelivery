@@ -48,7 +48,7 @@ export function DiscoveryPage() {
   const [freeDelivery, setFreeDelivery] = useState(false)
   const [favouritesOnly, setFavouritesOnly] = useState(false)
   const [highRating, setHighRating] = useState(false)
-  const [openNow, setOpenNow] = useState(true)
+  const [openNow, setOpenNow] = useState(false)
   const [offersOnly, setOffersOnly] = useState(false)
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([])
   const [basketOpen, setBasketOpen] = useState(false)
